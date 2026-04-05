@@ -17,8 +17,10 @@ final class AppCoordinator: ObservableObject {
     @Published var showSettings: Bool = false
     @Published var settingsMessage: String?
     @Published var language: AppLanguage
+    @Published var aiDraftTask: String = ""
     @Published private(set) var pasteTargetAppName: String = "Current App"
 
+    @Published private(set) var aiConfiguration: AIConfiguration
     @Published private(set) var hotKeyConfiguration: HotKeyConfiguration
     @Published private(set) var launchAtLoginEnabled: Bool
     @Published private(set) var clipboardHistory = ClipboardHistoryService.shared
@@ -33,6 +35,7 @@ final class AppCoordinator: ObservableObject {
         case closeSettings
     }
 
+    private let aiConfigurationStorageKey = "whyutils.ai.configuration"
     private let hotKeyStorageKey = "whyutils.hotkey.configuration"
     private let appSearchService: AppSearchService
     private var hotKeyManager: GlobalHotKeyManager?
@@ -43,14 +46,17 @@ final class AppCoordinator: ObservableObject {
     private init() {
         LaunchDiagnosticsLogger.log("AppCoordinator.init begin")
         let loadedLanguage = AppLanguage.load()
+        let loadedAIConfiguration = Self.loadAIConfiguration(key: aiConfigurationStorageKey)
         let loadedHotKey = Self.loadHotKeyConfiguration(key: hotKeyStorageKey)
         let launchAtLogin = LaunchAtLoginService.isEnabled()
         let appSearch = AppSearchService.shared
         language = loadedLanguage
+        aiConfiguration = loadedAIConfiguration
         hotKeyConfiguration = loadedHotKey
         launchAtLoginEnabled = launchAtLogin
         appSearchService = appSearch
         LaunchDiagnosticsLogger.log("AppCoordinator.init language loaded=\(loadedLanguage.rawValue)")
+        LaunchDiagnosticsLogger.log("AppCoordinator.init ai enabled=\(loadedAIConfiguration.isEnabled)")
         LaunchDiagnosticsLogger.log("AppCoordinator.init hotKey loaded=\(loadedHotKey.display)")
         LaunchDiagnosticsLogger.log("AppCoordinator.init launchAtLoginEnabled=\(launchAtLogin)")
 
@@ -311,8 +317,34 @@ final class AppCoordinator: ObservableObject {
         )
     }
 
+    func updateAIConfiguration(
+        isEnabled: Bool? = nil,
+        baseURL: String? = nil,
+        apiKey: String? = nil,
+        model: String? = nil
+    ) {
+        var next = aiConfiguration
+        if let isEnabled { next.isEnabled = isEnabled }
+        if let baseURL { next.baseURL = baseURL }
+        if let apiKey { next.apiKey = apiKey }
+        if let model { next.model = model }
+        aiConfiguration = next
+        saveAIConfiguration(next, key: aiConfigurationStorageKey)
+    }
+
     func localized(_ english: String, _ chinese: String) -> String {
         L10n.text(english, chinese, language: language)
+    }
+
+    private static func loadAIConfiguration(key: String) -> AIConfiguration {
+        guard let data = UserDefaults.standard.data(forKey: key) else {
+            return AIConfiguration()
+        }
+        do {
+            return try JSONDecoder().decode(AIConfiguration.self, from: data)
+        } catch {
+            return AIConfiguration()
+        }
     }
 
     private static func loadHotKeyConfiguration(key: String) -> HotKeyConfiguration {
@@ -325,6 +357,11 @@ final class AppCoordinator: ObservableObject {
         } catch {
             return .default
         }
+    }
+
+    private func saveAIConfiguration(_ value: AIConfiguration, key: String) {
+        guard let data = try? JSONEncoder().encode(value) else { return }
+        UserDefaults.standard.set(data, forKey: key)
     }
 
     private func saveHotKeyConfiguration(_ value: HotKeyConfiguration, key: String) {

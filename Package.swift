@@ -9,6 +9,9 @@ let package = Package(
     products: [
         .executable(name: "whyutils-swift", targets: ["WhyUtilsApp"])
     ],
+    dependencies: [
+        .package(url: "https://github.com/swiftlang/swift-testing.git", branch: "release/6.2.2")
+    ],
     targets: [
         .executableTarget(
             name: "WhyUtilsApp",
@@ -16,7 +19,10 @@ let package = Package(
         ),
         .testTarget(
             name: "WhyUtilsAppTests",
-            dependencies: ["WhyUtilsApp"],
+            dependencies: [
+                "WhyUtilsApp",
+                .product(name: "Testing", package: "swift-testing")
+            ],
             path: "Tests/WhyUtilsAppTests"
         )
     ]
