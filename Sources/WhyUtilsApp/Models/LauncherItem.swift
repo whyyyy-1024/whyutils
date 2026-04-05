@@ -1,6 +1,7 @@
 import Foundation
 
 enum LauncherItem: Identifiable, Equatable {
+    case aiPrompt(query: String)
     case googleSearch(query: String)
     case systemSetting(SystemSettingItem)
     case app(AppSearchItem)
@@ -8,6 +9,8 @@ enum LauncherItem: Identifiable, Equatable {
 
     var id: String {
         switch self {
+        case .aiPrompt(let query):
+            return "ai:\(query)"
         case .googleSearch(let query):
             return "google:\(query)"
         case .systemSetting(let setting):
@@ -21,6 +24,8 @@ enum LauncherItem: Identifiable, Equatable {
 
     var symbol: String {
         switch self {
+        case .aiPrompt:
+            return "sparkles"
         case .googleSearch:
             return "magnifyingglass.circle.fill"
         case .systemSetting(let setting):
@@ -48,6 +53,8 @@ enum LauncherItem: Identifiable, Equatable {
 
     func title(in language: AppLanguage) -> String {
         switch self {
+        case .aiPrompt:
+            return L10n.text("Ask AI Assistant", "交给 AI 助手", language: language)
         case .googleSearch:
             return L10n.text("Search Google", "搜索 Google", language: language)
         case .systemSetting(let setting):
@@ -61,6 +68,8 @@ enum LauncherItem: Identifiable, Equatable {
 
     func subtitle(in language: AppLanguage) -> String {
         switch self {
+        case .aiPrompt(let query):
+            return query
         case .googleSearch(let query):
             return query
         case .systemSetting(let setting):

@@ -4,6 +4,8 @@ enum OpenAICompatibleClientError: LocalizedError {
     case invalidBaseURL
     case missingAPIKey
     case missingModel
+    case invalidResponse
+    case serverError(statusCode: Int, message: String)
 
     var errorDescription: String? {
         switch self {
@@ -13,11 +15,15 @@ enum OpenAICompatibleClientError: LocalizedError {
             return "Missing API key"
         case .missingModel:
             return "Missing model"
+        case .invalidResponse:
+            return "Invalid response payload"
+        case .serverError(let statusCode, let message):
+            return "Request failed (\(statusCode)): \(message)"
         }
     }
 }
 
-struct OpenAIChatMessage: Codable, Equatable {
+struct OpenAIChatMessage: Codable, Equatable, Sendable {
     let role: String
     let content: String
 }
@@ -63,5 +69,41 @@ enum OpenAICompatibleClient {
             )
         )
         return request
+    }
+
+    static func completeChat(
+        configuration: AIConfiguration,
+        messages: [OpenAIChatMessage],
+        session: URLSession = .shared
+    ) async throws -> String {
+        let request = try buildChatRequest(configuration: configuration, messages: messages)
+        let (data, response) = try await session.data(for: request)
+        let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+        guard (200..<300).contains(statusCode) else {
+            let message = String(data: data, encoding: .utf8) ?? "Unknown error"
+            throw OpenAICompatibleClientError.serverError(statusCode: statusCode, message: message)
+        }
+        return try parseChatCompletionResponse(data)
+    }
+
+    static func parseChatCompletionResponse(_ data: Data) throws -> String {
+        struct ChatResponse: Decodable {
+            struct Choice: Decodable {
+                struct Message: Decodable {
+                    let content: String
+                }
+
+                let message: Message
+            }
+
+            let choices: [Choice]
+        }
+
+        let response = try JSONDecoder().decode(ChatResponse.self, from: data)
+        guard let content = response.choices.first?.message.content,
+              content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false else {
+            throw OpenAICompatibleClientError.invalidResponse
+        }
+        return content
     }
 }

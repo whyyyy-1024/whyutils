@@ -23,6 +23,7 @@
 | 系统设置搜索与跳转（VPN/Wi-Fi 等） | `Sources/WhyUtilsApp/Services/SystemSettingsSearchService.swift`, `Sources/WhyUtilsApp/Models/SystemSettingItem.swift` |
 | 全局热键行为 | `Sources/WhyUtilsApp/Hotkey/HotKeyConfiguration.swift`, `Sources/WhyUtilsApp/Hotkey/GlobalHotKeyManager.swift`, `Sources/WhyUtilsApp/ViewModels/AppCoordinator.swift` |
 | 设置页（语言、热键、开机启动） | `Sources/WhyUtilsApp/Views/SettingsSheetView.swift`, `Sources/WhyUtilsApp/ViewModels/AppCoordinator.swift`, `Sources/WhyUtilsApp/Localization/AppLanguage.swift`, `Sources/WhyUtilsApp/Services/LaunchAtLoginService.swift` |
+| AI Assistant（配置、规划、执行、确认） | `Sources/WhyUtilsApp/Views/Tools/AIAssistantToolView.swift`, `Sources/WhyUtilsApp/Services/AI/*`, `Sources/WhyUtilsApp/ViewModels/AppCoordinator.swift`, `Sources/WhyUtilsApp/Views/SettingsSheetView.swift` |
 | 剪贴板历史采集/回贴 | `Sources/WhyUtilsApp/Services/ClipboardHistoryService.swift`, `Sources/WhyUtilsApp/Services/PasteAutomationService.swift`, `Sources/WhyUtilsApp/Views/Tools/ClipboardHistoryToolView.swift`, `Sources/WhyUtilsApp/ViewModels/AppCoordinator.swift` |
 | Search Files（文件搜索） | `Sources/WhyUtilsApp/Services/FileSearchService.swift`, `Sources/WhyUtilsApp/Views/Tools/FileSearchToolView.swift`, `Sources/WhyUtilsApp/Models/ToolKind.swift` |
 | JSON/时间戳/URL/Base64/Hash/Regex 功能 | `Sources/WhyUtilsApp/Views/Tools/*ToolView.swift`, 对应 `Sources/WhyUtilsApp/Services/*.swift` |
@@ -67,8 +68,9 @@
 
 1. `SystemSettingsSearchService.search` 结果（仅 query 非空）
 2. `AppSearchService.search` 结果（仅 query 非空）
-3. `GoogleSearch`（仅 query 非空）
-4. 工具列表 `ToolKind`（始终存在，按匹配过滤）
+3. `AI Assistant` 自然语言 handoff（仅 query 非空且 AI 已启用）
+4. `GoogleSearch`（仅 query 非空）
+5. 工具列表 `ToolKind`（始终存在，按匹配过滤）
 
 ---
 
@@ -111,6 +113,8 @@
 - `highlightedItem`: launcher 当前高亮项
 - `showSettings`: 设置弹窗是否显示
 - `language`: 当前语言
+- `aiDraftTask`: launcher 传给 AI Assistant 的自然语言任务
+- `aiConfiguration`: AI 开关、baseURL、apiKey、model
 - `hotKeyConfiguration`: 热键配置
 - `launchAtLoginEnabled`: 开机启动开关
 - `clipboardHistory`: 剪贴板历史服务单例
@@ -120,6 +124,7 @@
 
 - 语言：`whyutils.app.language`
 - 热键：`whyutils.hotkey.configuration`
+- AI 配置：`whyutils.ai.configuration`
 - 剪贴板历史：`whyutils.clipboard.history`
 - 最近应用：`whyutils.app-search.recent-apps`
 
@@ -153,6 +158,8 @@
 - local key monitor 处理上下选择、回车打开、Esc 隐藏/关闭 settings
 - `AppCoordinator.launcherKeyAction(...)` 是可测试的键位判定入口
 - `openLauncherItem` 分发到 tool/system setting/app/google
+- AI 已启用时，launcher 会额外注入 `LauncherItem.aiPrompt(query:)`
+- `openAIAssistant(with:)` 会把自然语言任务写入 `aiDraftTask` 并切换到 `.tool(.aiAssistant)`
 
 ### 6.3 App 搜索（最近应用 + 全量索引）
 
@@ -223,6 +230,38 @@
 
 ### 6.7 其他工具与服务映射
 
+### 6.7 AI Assistant
+
+文件：
+
+- `Sources/WhyUtilsApp/Views/Tools/AIAssistantToolView.swift`
+- `Sources/WhyUtilsApp/Services/AI/AIAgentService.swift`
+- `Sources/WhyUtilsApp/Services/AI/AIToolRegistry.swift`
+- `Sources/WhyUtilsApp/Services/AI/OpenAICompatibleClient.swift`
+- `Sources/WhyUtilsApp/Models/AIAgentTypes.swift`
+
+关键点：
+
+- 产品形态不是聊天框，而是受限 `plan-then-act` 执行台
+- 模型只负责生成 1 到 3 步计划，真正执行由本地代码验证
+- `AIToolRegistry` 维护可用工具白名单和是否需要确认
+- `AIAgentService.submit` 流程：
+  - 调 OpenAI 兼容接口拿计划 JSON
+  - 校验步数和工具合法性
+  - 副作用动作先返回 `AIConfirmationRequest`
+  - 安全动作直接执行并返回 `AIAgentRunResult`
+- 当前 live executor 已接：
+  - clipboard read/list
+  - JSON validate/format/minify
+  - URL / Base64
+  - timestamp/date
+  - regex find/replace preview
+  - search apps / settings / files
+  - open app / file / setting
+  - paste clipboard entry
+
+### 6.8 其他工具与服务映射
+
 | Tool View | Service |
 |---|---|
 | `JSONToolView` | `JSONService` |
@@ -254,7 +293,15 @@
 2. 若是 app 搜索权重，改 `AppSearchService.matchScore/sort/recencyBonus`。  
 3. 运行 `AppSearchServiceTests` + `LauncherSearchFilesTests`。
 
-### 7.3 调整全局热键默认值或限制
+### 7.3 调整 AI Assistant 配置或可用工具
+
+1. 改 `Services/AI/AIToolRegistry.swift` 的工具白名单与确认标记。  
+2. 改 `Services/AI/AIAgentService.swift` 的 prompt、校验和 live executor。  
+3. 改 `Views/Tools/AIAssistantToolView.swift` 的展示与交互。  
+4. 改 `Views/SettingsSheetView.swift` / `ViewModels/AppCoordinator.swift` 的配置项持久化。  
+5. 运行 `AIAgentTypesTests`、`AIAgentServiceTests`、`OpenAICompatibleClientTests`。
+
+### 7.4 调整全局热键默认值或限制
 
 1. 改 `HotKeyConfiguration.default`。  
 2. 若新增按键，改 `HotKeyKey`（包含 keyCode/title）。  

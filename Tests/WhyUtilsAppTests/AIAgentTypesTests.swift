@@ -41,4 +41,18 @@ struct AIAgentTypesTests {
 
         #expect(plan.requiresConfirmation == true)
     }
+
+    @Test
+    func confirmationRequestListsOnlySideEffectfulTools() {
+        let plan = AIExecutionPlan(
+            goal: "Open Finder",
+            steps: [
+                AIPlanStep(toolName: "json_format", argumentsJSON: "{}"),
+                AIPlanStep(toolName: "open_app", argumentsJSON: "{\"bundleIdentifier\":\"com.apple.finder\"}", requiresConfirmation: true)
+            ]
+        )
+
+        let request = AIConfirmationRequest(plan: plan)
+        #expect(request.summary == "open_app")
+    }
 }

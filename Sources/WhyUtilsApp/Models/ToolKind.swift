@@ -1,6 +1,7 @@
 import Foundation
 
 enum ToolKind: String, CaseIterable, Identifiable {
+    case aiAssistant
     case clipboard
     case searchFiles
     case json
@@ -16,6 +17,7 @@ enum ToolKind: String, CaseIterable, Identifiable {
 
     func title(in language: AppLanguage) -> String {
         switch self {
+        case .aiAssistant: return L10n.text("AI Assistant", "AI 助手", language: language)
         case .clipboard: return L10n.text("Clipboard History", "剪贴板历史", language: language)
         case .searchFiles: return L10n.text("Search Files", "搜索文件", language: language)
         case .json: return L10n.text("JSON Tool", "JSON 工具", language: language)
@@ -31,6 +33,7 @@ enum ToolKind: String, CaseIterable, Identifiable {
 
     func subtitle(in language: AppLanguage) -> String {
         switch self {
+        case .aiAssistant: return L10n.text("Plan and run WhyUtils tools with AI", "用 AI 规划并调用 WhyUtils 工具", language: language)
         case .clipboard: return L10n.text("Browse, search, and paste clipboard history", "查看、搜索、回贴历史复制内容", language: language)
         case .searchFiles: return L10n.text("File Search", "文件搜索", language: language)
         case .json: return L10n.text("Validate, format, minify, and escape", "合法性检查、格式化、压缩、转义", language: language)
@@ -44,6 +47,7 @@ enum ToolKind: String, CaseIterable, Identifiable {
 
     var symbol: String {
         switch self {
+        case .aiAssistant: return "sparkles"
         case .clipboard: return "doc.on.clipboard"
         case .searchFiles: return "magnifyingglass.circle.fill"
         case .json: return "curlybraces.square"

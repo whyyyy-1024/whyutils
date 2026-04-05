@@ -56,6 +56,8 @@ struct ToolContainerView: View {
 
                     Group {
                         switch tool {
+                        case .aiAssistant:
+                            AIAssistantToolView()
                         case .clipboard:
                             EmptyView()
                         case .searchFiles:

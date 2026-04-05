@@ -17,6 +17,7 @@ struct SettingsSheetView: View {
                     languageSection
                     hotkeySection
                     launchAtLoginSection
+                    aiSection
                     if let message = coordinator.settingsMessage, !message.isEmpty {
                         statusSection(message)
                     }
@@ -129,6 +130,65 @@ struct SettingsSheetView: View {
             ))
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(.secondary)
+        }
+    }
+
+    private var aiSection: some View {
+        let enabled = Binding(
+            get: { coordinator.aiConfiguration.isEnabled },
+            set: { coordinator.updateAIConfiguration(isEnabled: $0) }
+        )
+        let baseURL = Binding(
+            get: { coordinator.aiConfiguration.baseURL },
+            set: { coordinator.updateAIConfiguration(baseURL: $0) }
+        )
+        let apiKey = Binding(
+            get: { coordinator.aiConfiguration.apiKey },
+            set: { coordinator.updateAIConfiguration(apiKey: $0) }
+        )
+        let model = Binding(
+            get: { coordinator.aiConfiguration.model },
+            set: { coordinator.updateAIConfiguration(model: $0) }
+        )
+
+        return settingsCard(title: coordinator.localized("AI Assistant", "AI 助手")) {
+            Toggle(coordinator.localized("Enable OpenAI-compatible AI Assistant", "启用 OpenAI 兼容 AI 助手"), isOn: enabled)
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Base URL")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                TextField("https://api.openai.com/v1", text: baseURL)
+                    .textFieldStyle(.roundedBorder)
+                    .disabled(enabled.wrappedValue == false)
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("API Key")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                SecureField("sk-...", text: apiKey)
+                    .textFieldStyle(.roundedBorder)
+                    .disabled(enabled.wrappedValue == false)
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Model")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                TextField("gpt-4.1-mini", text: model)
+                    .textFieldStyle(.roundedBorder)
+                    .disabled(enabled.wrappedValue == false)
+            }
+
+            Text(coordinator.localized(
+                "The AI Assistant plans up to 3 local tool steps. Actions that open apps, settings, files, or paste content require confirmation.",
+                "AI 助手最多规划 3 步本地工具调用。打开应用、设置、文件或执行粘贴前会要求确认。"
+            ))
+            .font(.system(size: 12, weight: .medium))
+            .foregroundStyle(.secondary)
         }
     }
 

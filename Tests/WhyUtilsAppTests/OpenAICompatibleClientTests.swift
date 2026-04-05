@@ -38,4 +38,24 @@ struct OpenAICompatibleClientTests {
 
         #expect(request.url?.absoluteString == "https://example.com/v1/chat/completions")
     }
+
+    @Test
+    func parsesChatCompletionResponseContent() throws {
+        let data = Data(
+            """
+            {
+              "choices": [
+                {
+                  "message": {
+                    "content": "{\\"goal\\":\\"Format clipboard\\",\\"steps\\":[]}"
+                  }
+                }
+              ]
+            }
+            """.utf8
+        )
+
+        let content = try OpenAICompatibleClient.parseChatCompletionResponse(data)
+        #expect(content == "{\"goal\":\"Format clipboard\",\"steps\":[]}")
+    }
 }

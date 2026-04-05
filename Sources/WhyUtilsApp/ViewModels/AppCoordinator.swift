@@ -144,6 +144,9 @@ final class AppCoordinator: ObservableObject {
             ).map { LauncherItem.app($0) }
             items.append(contentsOf: settingsItems)
             items.append(contentsOf: appItems)
+            if aiConfiguration.isEnabled {
+                items.append(.aiPrompt(query: trimmed))
+            }
             items.append(.googleSearch(query: trimmed))
         }
         items.append(contentsOf: filteredTools.map { .tool($0) })
@@ -211,6 +214,12 @@ final class AppCoordinator: ObservableObject {
         highlightedItem = .tool(tool)
     }
 
+    func openAIAssistant(with task: String) {
+        aiDraftTask = task.trimmingCharacters(in: .whitespacesAndNewlines)
+        route = .tool(.aiAssistant)
+        highlightedItem = .tool(.aiAssistant)
+    }
+
     func backToLauncher() {
         route = .launcher
     }
@@ -241,6 +250,8 @@ final class AppCoordinator: ObservableObject {
 
     func openLauncherItem(_ item: LauncherItem) {
         switch item {
+        case .aiPrompt(let query):
+            openAIAssistant(with: query)
         case .tool(let tool):
             selectTool(tool)
         case .systemSetting(let setting):

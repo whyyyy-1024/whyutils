@@ -243,7 +243,7 @@ private struct LauncherRowView: View {
                 .frame(width: 22, height: 22)
                 .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                 .frame(width: 28, alignment: .center)
-        case .googleSearch, .systemSetting, .tool:
+        case .aiPrompt, .googleSearch, .systemSetting, .tool:
             Image(systemName: item.symbol)
                 .font(.system(size: 18, weight: .semibold))
                 .foregroundStyle(active ? .white : .teal)
@@ -254,6 +254,10 @@ private struct LauncherRowView: View {
     @ViewBuilder
     private var trailingIndicator: some View {
         switch item {
+        case .aiPrompt:
+            Image(systemName: "wand.and.stars")
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(active ? Color.white.opacity(0.8) : .secondary)
         case .app(let app):
             if app.isRunning {
                 Text(language == .english ? "Running" : "运行中")
