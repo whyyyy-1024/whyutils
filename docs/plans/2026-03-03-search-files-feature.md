@@ -2,7 +2,7 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** 在 whyutils 中新增 Raycast 风格的 Search Files 工具，支持 User/This Mac 范围切换、Recent Files、打开与 Finder 定位。
+**Goal:** 在 whyutils 中新增命令面板风格的 Search Files 工具，支持 User/This Mac 范围切换、Recent Files、打开与 Finder 定位。
 
 **Architecture:** 采用 `NSMetadataQuery` 作为搜索后端，新增 `FileSearchService` 负责查询与结果映射，新增 `FileSearchToolView` 承载 UI 与交互。Launcher 增加入口，Tool 路由接入新工具。右侧预览和 metadata 复用现有卡片风格组件并保持暗色/亮色兼容。
 
@@ -198,7 +198,7 @@ Expected: PASS.
 
 ```bash
 git add Sources/WhyUtilsApp/Views/Tools/FileSearchToolView.swift Sources/WhyUtilsApp/Views/ToolContainerView.swift Tests/WhyUtilsAppTests
-git commit -m "feat: add Raycast-style file search view"
+git commit -m "feat: add command-palette style file search view"
 ```
 
 ### Task 5: End-to-End Verification and Packaging

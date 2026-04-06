@@ -1,6 +1,6 @@
 # WhyUtils
 
-A Raycast-style launcher for macOS, built with SwiftUI.
+A command palette for macOS, built with SwiftUI.
 
 WhyUtils combines a fast command palette with practical local tools: clipboard history, file search, text/data utilities, system actions, and an OpenAI-compatible AI assistant that can chat or invoke local tools depending on the configured access mode.
 

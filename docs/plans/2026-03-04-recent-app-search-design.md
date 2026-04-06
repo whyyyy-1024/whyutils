@@ -1,7 +1,7 @@
 # WhyUtils Recent App Search Design (方案2)
 
 ## Goal
-- 在主 Launcher 中支持“最近应用 + 应用搜索 + 直接打开/切换”，交互接近 Raycast。
+- 在主 Launcher 中支持“最近应用 + 应用搜索 + 直接打开/切换”，交互接近通用命令面板。
 
 ## UX
 - 空搜索词：先显示 Recent Apps，再显示工具命令。
