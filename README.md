@@ -1,53 +1,101 @@
-# whyutils SwiftUI (macOS)
+# WhyUtils
 
-Raycast 风格的 SwiftUI 版本，支持：
+A Raycast-style launcher for macOS, built with SwiftUI.
 
-- 全局快捷键唤醒（默认 `⌘⇧Space`，可在设置中修改）
-- 启动器内搜索并选择工具
-- 8 个工具页：剪贴板历史、Search Files、JSON、时间戳、URL、Base64、哈希、正则
-- 设置面板：自定义热键、开机启动开关
-- 全局语言：English（默认）/ 中文
+WhyUtils combines a fast command palette with practical local tools: clipboard history, file search, text/data utilities, system actions, and an OpenAI-compatible AI assistant that can chat or invoke local tools depending on the configured access mode.
 
-## 运行（开发）
+## Preview
+
+![WhyUtils homepage](docs/assets/whyutils-homepage.png)
+
+Launcher-first UX, local utilities, and an AI assistant live in the same command surface.
+
+## Features
+
+- Fast launcher panel with keyboard-first navigation
+- Global hotkey to show or hide the app
+- Clipboard history with quick paste-back automation
+- Local file search with Finder reveal and direct open
+- Built-in utilities for:
+  - JSON formatting and validation
+  - Timestamp conversion
+  - URL encode/decode
+  - Base64 encode/decode
+  - Hash generation
+  - Regex testing
+- Search shortcuts for apps, system settings, and web search
+- AI Assistant with:
+  - OpenAI-compatible API support
+  - Custom `baseURL`, `apiKey`, and `model`
+  - Local chat session history
+  - Multimodal image input support
+  - Access modes for bounded tools vs. higher-permission local actions
+- English and Chinese UI
+- Launch-at-login support
+
+## Core workflows
+
+- Open the launcher and jump directly to a tool, app, file, or system setting
+- Search recent clipboard history and paste content back into the previous app
+- Run quick text transformations without leaving the keyboard
+- Use the AI Assistant for chat, image input, or local tool execution through an OpenAI-compatible provider
+
+## Why this project exists
+
+WhyUtils started as a lightweight personal macOS utility launcher, but the goal is broader than a single-purpose shortcut panel. The app is meant to be a compact desktop toolbox: fast to summon, easy to extend, and useful for everyday developer and productivity workflows.
+
+## Requirements
+
+- macOS 12+
+- Xcode or Command Line Tools with Swift Package Manager support
+
+## Development
+
+Run the app in development mode:
 
 ```bash
-cd /Users/wanghaoyu/Documents/whyutils/whyutils-swift
 swift run whyutils-swift
 ```
 
-## 打包为 .app
+Run the test suite:
 
 ```bash
-cd /Users/wanghaoyu/Documents/whyutils/whyutils-swift
-./scripts/build_app.sh
-open /Users/wanghaoyu/Documents/whyutils/whyutils-swift/dist/whyutils-swift.app
+env CPLUS_INCLUDE_PATH=/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1 swift test
 ```
 
-- `build_app.sh` 产物适合本机使用（默认 ad-hoc 签名）。
-- 若要发给同事直接双击打开，请走“签名+公证”流程（见下方）。
+## Build a local app bundle
 
-### 权限稳定说明（辅助功能/自动化）
+```bash
+./scripts/build_app.sh
+open dist/whyutils-swift.app
+```
 
-- 默认构建会使用 **ad-hoc 签名**（保证 `.app` 可直接双击启动）。
-- 若需要签名，请使用固定证书身份（推荐）：
+The default build is intended for local use and uses ad-hoc signing.
+
+If you want to build with a specific signing identity:
 
 ```bash
 WHYUTILS_SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" ./scripts/build_app.sh
 ```
 
-- 若想完全跳过签名（部分系统可能无法双击打开）：
+If you want to skip signing entirely:
 
 ```bash
 WHYUTILS_SIGN_MODE=none ./scripts/build_app.sh
 ```
 
-- 注意：ad-hoc 每次构建会变化，可能导致辅助功能/自动化权限被系统视为新应用。
+## Permissions
 
-### 分发给同事（Developer ID + Notarization）
+Some features depend on macOS permissions:
 
-> 只有完成公证（notarization）的包，才最稳定地通过同事机器上的 Gatekeeper 检查。
+- Accessibility: required for reliable paste-back automation
+- Automation / Apple Events: required for some app and system integrations
 
-1) 先在本机保存 notarytool 凭据（只需一次）：
+Because ad-hoc signatures can change between builds, macOS may treat a rebuilt app as a new binary and ask for permissions again.
+
+## Distribution and notarization
+
+For distribution outside your own machine, use the notarization flow:
 
 ```bash
 xcrun notarytool store-credentials "whyutils-notary" \
@@ -56,56 +104,48 @@ xcrun notarytool store-credentials "whyutils-notary" \
   --password "<APP_SPECIFIC_PASSWORD>"
 ```
 
-2) 生成可分发版本（签名 + 公证 + stapler）：
+Then build and notarize:
 
 ```bash
-cd /Users/wanghaoyu/Documents/whyutils/whyutils-swift
 WHYUTILS_SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" \
 WHYUTILS_NOTARY_PROFILE="whyutils-notary" \
 ./scripts/notarize_release.sh
 ```
 
-3) 分发 `dist/whyutils-swift.zip` 给同事。
+## Keyboard shortcuts
 
-### 同事打不开时的快速自检
+- `⌘⇧Space`: show or hide the launcher by default
+- `↑` / `↓`: move selection in the launcher
+- `Enter`: open the highlighted result
+- `Esc`: return to launcher or dismiss the current surface
+- `⌘Enter` in file search: reveal the file in Finder
 
-在同事机器执行：
+## Project status
 
-```bash
-spctl --assess --type execute -vv /path/to/whyutils-swift.app
-```
+WhyUtils is actively evolving. The current focus areas are:
 
-如果显示 `Notary Ticket Missing`，说明是未公证包。
+- polishing the AI Assistant UX
+- improving launcher quality and local integrations
+- making the project easier to build, extend, and ship as a real macOS utility
 
-### 开机启动说明
+## Contributing
 
-- 优先写入 `~/Library/LaunchAgents`。
-- 如果该目录不可写，会自动回退到 `~/Library/Application Support/whyutils/LaunchAgents`。
+Issues and pull requests are welcome.
 
-### 架构兼容说明
+If you want to contribute, the most useful areas right now are:
 
-- 默认会构建 `arm64 + x86_64` Universal 包，兼容 Apple 芯片和 Intel Mac。
-- 可通过环境变量覆盖：
+- launcher ranking and search behavior
+- macOS permission and automation reliability
+- UI polish and accessibility
+- AI tool execution safety and UX
+- build, signing, and distribution workflow improvements
 
-```bash
-WHYUTILS_ARCHS="arm64" ./scripts/build_app.sh
-```
+## Codebase notes
 
-## 开机启动（脚本兜底）
+A compact architecture/context index is available at:
 
-```bash
-cd /Users/wanghaoyu/Documents/whyutils/whyutils-swift
-./scripts/install_launch_agent.sh
-./scripts/uninstall_launch_agent.sh
-```
+- [`docs/CODEBASE_CONTEXT.md`](docs/CODEBASE_CONTEXT.md)
 
-## 快捷键
+## License
 
-- `⌘⇧Space`（默认）全局唤醒/隐藏
-- 启动器内 `↑/↓` 选择，`Enter` 打开
-- 工具页 `Esc` 返回启动器
-- Search Files 工具内：`Enter` 打开文件，`⌘Enter` 在 Finder 定位文件
-
-## JSON bug 修复说明
-
-JSON 操作失败时会同步刷新输出区为错误信息，不会再出现“状态报错但输出仍是旧成功结果”的不一致问题。
+MIT. See [`LICENSE`](LICENSE).
