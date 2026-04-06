@@ -9,6 +9,7 @@ struct AIAgentTypesTests {
         #expect(config.baseURL == "")
         #expect(config.apiKey == "")
         #expect(config.model == "")
+        #expect(config.accessMode == .standard)
     }
 
     @Test
@@ -54,5 +55,20 @@ struct AIAgentTypesTests {
 
         let request = AIConfirmationRequest(plan: plan)
         #expect(request.summary == "open_app")
+    }
+
+    @Test
+    func unrestrictedAccessModeExpandsCapabilities() {
+        #expect(AIAgentAccessMode.standard.includesFullAccessTools == false)
+        #expect(AIAgentAccessMode.standard.requiresConfirmationForSideEffects == true)
+        #expect(AIAgentAccessMode.standard.maxPlanSteps == 3)
+
+        #expect(AIAgentAccessMode.fullAccess.includesFullAccessTools == true)
+        #expect(AIAgentAccessMode.fullAccess.requiresConfirmationForSideEffects == true)
+        #expect(AIAgentAccessMode.fullAccess.maxPlanSteps == 3)
+
+        #expect(AIAgentAccessMode.unrestricted.includesFullAccessTools == true)
+        #expect(AIAgentAccessMode.unrestricted.requiresConfirmationForSideEffects == false)
+        #expect(AIAgentAccessMode.unrestricted.maxPlanSteps == 8)
     }
 }

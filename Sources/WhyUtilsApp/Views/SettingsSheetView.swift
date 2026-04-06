@@ -150,6 +150,10 @@ struct SettingsSheetView: View {
             get: { coordinator.aiConfiguration.model },
             set: { coordinator.updateAIConfiguration(model: $0) }
         )
+        let accessMode = Binding(
+            get: { coordinator.aiConfiguration.accessMode },
+            set: { coordinator.updateAIConfiguration(accessMode: $0) }
+        )
 
         return settingsCard(title: coordinator.localized("AI Assistant", "AI 助手")) {
             Toggle(coordinator.localized("Enable OpenAI-compatible AI Assistant", "启用 OpenAI 兼容 AI 助手"), isOn: enabled)
@@ -183,12 +187,35 @@ struct SettingsSheetView: View {
                     .disabled(enabled.wrappedValue == false)
             }
 
-            Text(coordinator.localized(
-                "The AI Assistant plans up to 3 local tool steps. Actions that open apps, settings, files, or paste content require confirmation.",
-                "AI 助手最多规划 3 步本地工具调用。打开应用、设置、文件或执行粘贴前会要求确认。"
-            ))
+            Divider()
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text(coordinator.localized("Access Mode", "权限模式"))
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.secondary)
+
+                Picker("", selection: accessMode) {
+                    Text(coordinator.localized("Standard", "标准")).tag(AIAgentAccessMode.standard)
+                    Text("Full Access").tag(AIAgentAccessMode.fullAccess)
+                    Text(coordinator.localized("Unrestricted", "无限制")).tag(AIAgentAccessMode.unrestricted)
+                }
+                .labelsHidden()
+                .pickerStyle(.segmented)
+                .disabled(enabled.wrappedValue == false)
+            }
+
+            Text(accessModeDescription(accessMode.wrappedValue))
             .font(.system(size: 12, weight: .medium))
             .foregroundStyle(.secondary)
+
+            if accessMode.wrappedValue != .standard {
+                Text(coordinator.localized(
+                    "Higher access modes expose shell execution and direct file operations to the model. Only enable them for trusted providers and keys.",
+                    "更高权限模式会向模型开放 shell 执行和直接文件操作。仅在你信任当前模型供应商与密钥时开启。"
+                ))
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(.orange)
+            }
         }
     }
 
@@ -209,5 +236,25 @@ struct SettingsSheetView: View {
         }
         .padding(14)
         .background(Color.whyCardBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private func accessModeDescription(_ mode: AIAgentAccessMode) -> String {
+        switch mode {
+        case .standard:
+            return coordinator.localized(
+                "Standard mode keeps the agent inside WhyUtils tools and asks before side-effect actions. Plans are limited to 3 steps.",
+                "标准模式只允许使用 WhyUtils 内置工具，并在副作用动作前先确认。执行计划最多 3 步。"
+            )
+        case .fullAccess:
+            return coordinator.localized(
+                "Full Access adds shell, file, and URL tools, but still asks before side-effect actions. Plans are limited to 3 steps.",
+                "Full Access 会开放 shell、文件和 URL 工具，但副作用动作仍会先确认。执行计划最多 3 步。"
+            )
+        case .unrestricted:
+            return coordinator.localized(
+                "Unrestricted mode allows direct chat plus shell, file, URL, app, and paste actions without confirmation. Plans can expand up to 8 steps.",
+                "无限制模式允许直接聊天，并可无确认执行 shell、文件、URL、应用和粘贴动作。执行计划最多 8 步。"
+            )
+        }
     }
 }

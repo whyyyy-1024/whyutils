@@ -14,6 +14,9 @@ struct ToolContainerView: View {
             } else if tool == .searchFiles {
                 FileSearchToolView()
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            } else if tool == .aiAssistant {
+                AIAssistantToolView()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             } else {
                 VStack(spacing: 0) {
                     HStack(spacing: 10) {
@@ -57,7 +60,7 @@ struct ToolContainerView: View {
                     Group {
                         switch tool {
                         case .aiAssistant:
-                            AIAssistantToolView()
+                            EmptyView()
                         case .clipboard:
                             EmptyView()
                         case .searchFiles:

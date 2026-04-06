@@ -58,4 +58,64 @@ struct OpenAICompatibleClientTests {
         let content = try OpenAICompatibleClient.parseChatCompletionResponse(data)
         #expect(content == "{\"goal\":\"Format clipboard\",\"steps\":[]}")
     }
+
+    @Test
+    func buildChatRequestCanEnableStreaming() throws {
+        let config = AIConfiguration(
+            isEnabled: true,
+            baseURL: "https://example.com/v1",
+            apiKey: "secret",
+            model: "gpt-4.1"
+        )
+        let request = try OpenAICompatibleClient.buildChatRequest(
+            configuration: config,
+            messages: [.init(role: "user", content: "Hello")],
+            stream: true
+        )
+
+        let body = try #require(request.httpBody)
+        let json = try JSONSerialization.jsonObject(with: body) as? [String: Any]
+        #expect(json?["stream"] as? Bool == true)
+    }
+
+    @Test
+    func buildsChatRequestWithImageParts() throws {
+        let config = AIConfiguration(
+            isEnabled: true,
+            baseURL: "https://example.com/v1",
+            apiKey: "secret",
+            model: "gpt-4.1"
+        )
+        let request = try OpenAICompatibleClient.buildChatRequest(
+            configuration: config,
+            messages: [
+                .init(
+                    role: "user",
+                    content: .parts([
+                        .text("Describe this image"),
+                        .imageURL("data:image/png;base64,AAA")
+                    ])
+                )
+            ]
+        )
+
+        let body = try #require(request.httpBody)
+        let json = try #require(JSONSerialization.jsonObject(with: body) as? [String: Any])
+        let messages = try #require(json["messages"] as? [[String: Any]])
+        let first = try #require(messages.first)
+        let content = try #require(first["content"] as? [[String: Any]])
+        #expect(content.count == 2)
+        #expect(content.first?["type"] as? String == "text")
+        #expect((content.last?["image_url"] as? [String: Any])?["url"] as? String == "data:image/png;base64,AAA")
+    }
+
+    @Test
+    func parsesStreamingDeltaChunk() throws {
+        let chunk = """
+        {"choices":[{"delta":{"content":"hello"}}]}
+        """
+
+        let content = try OpenAICompatibleClient.parseChatCompletionStreamChunk(chunk)
+        #expect(content == "hello")
+    }
 }

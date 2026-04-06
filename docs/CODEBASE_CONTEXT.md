@@ -23,7 +23,7 @@
 | 系统设置搜索与跳转（VPN/Wi-Fi 等） | `Sources/WhyUtilsApp/Services/SystemSettingsSearchService.swift`, `Sources/WhyUtilsApp/Models/SystemSettingItem.swift` |
 | 全局热键行为 | `Sources/WhyUtilsApp/Hotkey/HotKeyConfiguration.swift`, `Sources/WhyUtilsApp/Hotkey/GlobalHotKeyManager.swift`, `Sources/WhyUtilsApp/ViewModels/AppCoordinator.swift` |
 | 设置页（语言、热键、开机启动） | `Sources/WhyUtilsApp/Views/SettingsSheetView.swift`, `Sources/WhyUtilsApp/ViewModels/AppCoordinator.swift`, `Sources/WhyUtilsApp/Localization/AppLanguage.swift`, `Sources/WhyUtilsApp/Services/LaunchAtLoginService.swift` |
-| AI Assistant（配置、规划、执行、确认） | `Sources/WhyUtilsApp/Views/Tools/AIAssistantToolView.swift`, `Sources/WhyUtilsApp/Services/AI/*`, `Sources/WhyUtilsApp/ViewModels/AppCoordinator.swift`, `Sources/WhyUtilsApp/Views/SettingsSheetView.swift` |
+| AI Assistant（聊天 UI、会话管理、规划、执行、确认） | `Sources/WhyUtilsApp/Views/Tools/AIAssistantToolView.swift`, `Sources/WhyUtilsApp/ViewModels/AIChatWorkspaceStore.swift`, `Sources/WhyUtilsApp/Models/AIChatSessionModels.swift`, `Sources/WhyUtilsApp/Services/AI/*`, `Sources/WhyUtilsApp/ViewModels/AppCoordinator.swift`, `Sources/WhyUtilsApp/Views/SettingsSheetView.swift` |
 | 剪贴板历史采集/回贴 | `Sources/WhyUtilsApp/Services/ClipboardHistoryService.swift`, `Sources/WhyUtilsApp/Services/PasteAutomationService.swift`, `Sources/WhyUtilsApp/Views/Tools/ClipboardHistoryToolView.swift`, `Sources/WhyUtilsApp/ViewModels/AppCoordinator.swift` |
 | Search Files（文件搜索） | `Sources/WhyUtilsApp/Services/FileSearchService.swift`, `Sources/WhyUtilsApp/Views/Tools/FileSearchToolView.swift`, `Sources/WhyUtilsApp/Models/ToolKind.swift` |
 | JSON/时间戳/URL/Base64/Hash/Regex 功能 | `Sources/WhyUtilsApp/Views/Tools/*ToolView.swift`, 对应 `Sources/WhyUtilsApp/Services/*.swift` |
@@ -114,7 +114,7 @@
 - `showSettings`: 设置弹窗是否显示
 - `language`: 当前语言
 - `aiDraftTask`: launcher 传给 AI Assistant 的自然语言任务
-- `aiConfiguration`: AI 开关、baseURL、apiKey、model
+- `aiConfiguration`: AI 开关、baseURL、apiKey、model、accessMode
 - `hotKeyConfiguration`: 热键配置
 - `launchAtLoginEnabled`: 开机启动开关
 - `clipboardHistory`: 剪贴板历史服务单例
@@ -235,6 +235,8 @@
 文件：
 
 - `Sources/WhyUtilsApp/Views/Tools/AIAssistantToolView.swift`
+- `Sources/WhyUtilsApp/ViewModels/AIChatWorkspaceStore.swift`
+- `Sources/WhyUtilsApp/Models/AIChatSessionModels.swift`
 - `Sources/WhyUtilsApp/Services/AI/AIAgentService.swift`
 - `Sources/WhyUtilsApp/Services/AI/AIToolRegistry.swift`
 - `Sources/WhyUtilsApp/Services/AI/OpenAICompatibleClient.swift`
@@ -242,14 +244,38 @@
 
 关键点：
 
-- 产品形态不是聊天框，而是受限 `plan-then-act` 执行台
-- 模型只负责生成 1 到 3 步计划，真正执行由本地代码验证
+- 当前产品形态是 ChatGPT 风格双栏聊天工作区：
+  - 左侧极简会话列表
+  - 右侧消息流 + composer
+  - tool traces / confirmation 内联到 assistant 消息里
+- `AIChatWorkspaceStore` 负责：
+  - 本地持久化会话
+  - 当前会话选择
+  - 新建 / 重命名 / 删除
+  - 按 message id 增量更新流式消息
+- `AIChatSessionModels` 定义持久化层：
+  - `AIChatSession`
+  - `AIChatMessageRecord`
+  - `AIChatMessageRole`
+- 标题规则：
+  - 空会话默认显示 `New chat`
+  - 第一条用户消息自动生成标题
+  - 手动重命名后不再被自动标题覆盖
+- 模型只负责“直聊 or tool plan”决策，真正执行由本地代码验证
 - `AIToolRegistry` 维护可用工具白名单和是否需要确认
 - `AIAgentService.submit` 流程：
-  - 调 OpenAI 兼容接口拿计划 JSON
+  - 调 OpenAI 兼容接口决定 `message` 还是 `tool_plan`
   - 校验步数和工具合法性
   - 副作用动作先返回 `AIConfirmationRequest`
   - 安全动作直接执行并返回 `AIAgentRunResult`
+- 流式行为：
+  - UI 通过 `OpenAICompatibleClient.streamChat` 消费 SSE
+  - `AIAssistantToolView` 持有当前 stream task，可 `Stop generating`
+  - partial assistant content 直接写入 workspace store
+- 权限模式定义在 `AIAgentTypes.AIAgentAccessMode`：
+  - `standard`
+  - `fullAccess`
+  - `unrestricted`
 - 当前 live executor 已接：
   - clipboard read/list
   - JSON validate/format/minify
@@ -297,9 +323,10 @@
 
 1. 改 `Services/AI/AIToolRegistry.swift` 的工具白名单与确认标记。  
 2. 改 `Services/AI/AIAgentService.swift` 的 prompt、校验和 live executor。  
-3. 改 `Views/Tools/AIAssistantToolView.swift` 的展示与交互。  
-4. 改 `Views/SettingsSheetView.swift` / `ViewModels/AppCoordinator.swift` 的配置项持久化。  
-5. 运行 `AIAgentTypesTests`、`AIAgentServiceTests`、`OpenAICompatibleClientTests`。
+3. 改 `ViewModels/AIChatWorkspaceStore.swift` 的会话 / 消息状态流。  
+4. 改 `Views/Tools/AIAssistantToolView.swift` 的会话布局、消息气泡和 composer。  
+5. 改 `Views/SettingsSheetView.swift` / `ViewModels/AppCoordinator.swift` 的配置项持久化。  
+6. 运行 `AIChatSessionModelsTests`、`AIChatWorkspaceStoreTests`、`AIAgentTypesTests`、`AIAgentServiceTests`、`OpenAICompatibleClientTests`。
 
 ### 7.4 调整全局热键默认值或限制
 

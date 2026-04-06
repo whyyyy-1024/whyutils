@@ -332,13 +332,15 @@ final class AppCoordinator: ObservableObject {
         isEnabled: Bool? = nil,
         baseURL: String? = nil,
         apiKey: String? = nil,
-        model: String? = nil
+        model: String? = nil,
+        accessMode: AIAgentAccessMode? = nil
     ) {
         var next = aiConfiguration
         if let isEnabled { next.isEnabled = isEnabled }
         if let baseURL { next.baseURL = baseURL }
         if let apiKey { next.apiKey = apiKey }
         if let model { next.model = model }
+        if let accessMode { next.accessMode = accessMode }
         aiConfiguration = next
         saveAIConfiguration(next, key: aiConfigurationStorageKey)
     }

@@ -1,10 +1,91 @@
 import Foundation
 
+enum AIAgentAccessMode: String, Codable, CaseIterable, Equatable, Identifiable, Sendable {
+    case standard
+    case fullAccess
+    case unrestricted
+
+    var id: String { rawValue }
+
+    var includesFullAccessTools: Bool {
+        self != .standard
+    }
+
+    var requiresConfirmationForSideEffects: Bool {
+        self != .unrestricted
+    }
+
+    var maxPlanSteps: Int {
+        switch self {
+        case .standard, .fullAccess:
+            return 3
+        case .unrestricted:
+            return 8
+        }
+    }
+}
+
 struct AIConfiguration: Codable, Equatable, Sendable {
     var isEnabled: Bool = false
     var baseURL: String = ""
     var apiKey: String = ""
     var model: String = ""
+    var accessMode: AIAgentAccessMode = .standard
+
+    enum CodingKeys: String, CodingKey {
+        case isEnabled
+        case baseURL
+        case apiKey
+        case model
+        case accessMode
+        case fullAccessEnabled
+        case skipConfirmationForSideEffects
+    }
+
+    init(
+        isEnabled: Bool = false,
+        baseURL: String = "",
+        apiKey: String = "",
+        model: String = "",
+        accessMode: AIAgentAccessMode = .standard
+    ) {
+        self.isEnabled = isEnabled
+        self.baseURL = baseURL
+        self.apiKey = apiKey
+        self.model = model
+        self.accessMode = accessMode
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        isEnabled = try container.decodeIfPresent(Bool.self, forKey: .isEnabled) ?? false
+        baseURL = try container.decodeIfPresent(String.self, forKey: .baseURL) ?? ""
+        apiKey = try container.decodeIfPresent(String.self, forKey: .apiKey) ?? ""
+        model = try container.decodeIfPresent(String.self, forKey: .model) ?? ""
+        if let accessMode = try container.decodeIfPresent(AIAgentAccessMode.self, forKey: .accessMode) {
+            self.accessMode = accessMode
+        } else {
+            let fullAccessEnabled = try container.decodeIfPresent(Bool.self, forKey: .fullAccessEnabled) ?? false
+            let skipConfirmation = try container.decodeIfPresent(Bool.self, forKey: .skipConfirmationForSideEffects) ?? false
+            switch (fullAccessEnabled, skipConfirmation) {
+            case (false, _):
+                self.accessMode = .standard
+            case (true, false):
+                self.accessMode = .fullAccess
+            case (true, true):
+                self.accessMode = .unrestricted
+            }
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(isEnabled, forKey: .isEnabled)
+        try container.encode(baseURL, forKey: .baseURL)
+        try container.encode(apiKey, forKey: .apiKey)
+        try container.encode(model, forKey: .model)
+        try container.encode(accessMode, forKey: .accessMode)
+    }
 }
 
 enum AIAgentExecutionState: Equatable, Sendable {
@@ -75,7 +156,7 @@ struct AIAgentContext: Equatable, Sendable {
     )
 }
 
-struct AIConfirmationRequest: Equatable, Sendable {
+struct AIConfirmationRequest: Codable, Equatable, Sendable {
     let plan: AIExecutionPlan
 
     var summary: String {
@@ -86,7 +167,7 @@ struct AIConfirmationRequest: Equatable, Sendable {
     }
 }
 
-struct AIToolExecutionTrace: Equatable, Identifiable, Sendable {
+struct AIToolExecutionTrace: Codable, Equatable, Identifiable, Sendable {
     let id: UUID
     let toolName: String
     let argumentsJSON: String
