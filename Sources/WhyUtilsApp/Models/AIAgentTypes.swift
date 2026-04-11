@@ -3,23 +3,22 @@ import Foundation
 enum AIAgentAccessMode: String, Codable, CaseIterable, Equatable, Identifiable, Sendable {
     case standard
     case fullAccess
-    case unrestricted
 
     var id: String { rawValue }
 
     var includesFullAccessTools: Bool {
-        self != .standard
+        self == .fullAccess
     }
 
     var requiresConfirmationForSideEffects: Bool {
-        self != .unrestricted
+        self == .standard
     }
 
     var maxPlanSteps: Int {
         switch self {
-        case .standard, .fullAccess:
+        case .standard:
             return 3
-        case .unrestricted:
+        case .fullAccess:
             return 8
         }
     }
@@ -66,15 +65,7 @@ struct AIConfiguration: Codable, Equatable, Sendable {
             self.accessMode = accessMode
         } else {
             let fullAccessEnabled = try container.decodeIfPresent(Bool.self, forKey: .fullAccessEnabled) ?? false
-            let skipConfirmation = try container.decodeIfPresent(Bool.self, forKey: .skipConfirmationForSideEffects) ?? false
-            switch (fullAccessEnabled, skipConfirmation) {
-            case (false, _):
-                self.accessMode = .standard
-            case (true, false):
-                self.accessMode = .fullAccess
-            case (true, true):
-                self.accessMode = .unrestricted
-            }
+            self.accessMode = fullAccessEnabled ? .fullAccess : .standard
         }
     }
 

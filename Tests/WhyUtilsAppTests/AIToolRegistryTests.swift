@@ -31,12 +31,12 @@ struct AIToolRegistryTests {
         )
         let tool = registry.tool(named: "run_shell_command")
         #expect(tool != nil)
-        #expect(tool?.requiresConfirmation == true)
+        #expect(tool?.requiresConfirmation == false)
     }
 
     @Test
-    func unrestrictedRegistrySkipsConfirmationForSideEffects() {
-        let registry = AIToolRegistry.configured(accessMode: .unrestricted)
+    func fullAccessRegistrySkipsConfirmationForSideEffects() {
+        let registry = AIToolRegistry.configured(accessMode: .fullAccess)
         let shellTool = registry.tool(named: "run_shell_command")
         let writeTool = registry.tool(named: "write_file")
         let openApp = registry.tool(named: "open_app")

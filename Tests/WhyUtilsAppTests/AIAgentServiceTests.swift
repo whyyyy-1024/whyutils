@@ -354,13 +354,13 @@ struct AIAgentServiceTests {
     }
 
     @Test
-    func unrestrictedModeAllowsLongerPlansWithoutConfirmation() {
+    func fullAccessModeAllowsLongerPlansWithoutConfirmation() {
         let service = AIAgentService(
-            registry: .configured(accessMode: .unrestricted),
+            registry: .configured(accessMode: .fullAccess),
             transport: .failingStub,
             executor: .noOp,
-            maxPlanSteps: AIAgentAccessMode.unrestricted.maxPlanSteps,
-            accessMode: .unrestricted
+            maxPlanSteps: AIAgentAccessMode.fullAccess.maxPlanSteps,
+            accessMode: .fullAccess
         )
 
         let plan = AIExecutionPlan(

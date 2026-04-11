@@ -58,17 +58,13 @@ struct AIAgentTypesTests {
     }
 
     @Test
-    func unrestrictedAccessModeExpandsCapabilities() {
+    func accessModeCapabilities() {
         #expect(AIAgentAccessMode.standard.includesFullAccessTools == false)
         #expect(AIAgentAccessMode.standard.requiresConfirmationForSideEffects == true)
         #expect(AIAgentAccessMode.standard.maxPlanSteps == 3)
 
         #expect(AIAgentAccessMode.fullAccess.includesFullAccessTools == true)
-        #expect(AIAgentAccessMode.fullAccess.requiresConfirmationForSideEffects == true)
-        #expect(AIAgentAccessMode.fullAccess.maxPlanSteps == 3)
-
-        #expect(AIAgentAccessMode.unrestricted.includesFullAccessTools == true)
-        #expect(AIAgentAccessMode.unrestricted.requiresConfirmationForSideEffects == false)
-        #expect(AIAgentAccessMode.unrestricted.maxPlanSteps == 8)
+        #expect(AIAgentAccessMode.fullAccess.requiresConfirmationForSideEffects == false)
+        #expect(AIAgentAccessMode.fullAccess.maxPlanSteps == 8)
     }
 }

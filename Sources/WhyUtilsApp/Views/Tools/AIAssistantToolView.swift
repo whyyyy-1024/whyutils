@@ -1101,8 +1101,6 @@ struct AIAssistantToolView: View {
             return coordinator.localized("Standard", "标准")
         case .fullAccess:
             return "Full Access"
-        case .unrestricted:
-            return coordinator.localized("Unrestricted", "无限制")
         }
     }
 
@@ -1112,8 +1110,6 @@ struct AIAssistantToolView: View {
             return .teal
         case .fullAccess:
             return .orange
-        case .unrestricted:
-            return .red
         }
     }
 
