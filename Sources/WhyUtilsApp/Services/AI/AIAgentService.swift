@@ -50,8 +50,14 @@ struct AIToolExecutor: Sendable {
 
     static func live(accessMode: AIAgentAccessMode) -> AIToolExecutor {
         let basicModule = BasicToolModule(accessMode: accessMode)
-        let registry = ToolRegistry(providers: [basicModule])
-        let executor = ToolExecutor(registry: registry, providers: [basicModule])
+        let fsModule = FileSystemModule()
+        let codeModule = CodeEditModule()
+        let memoryModule = MemoryModule()
+        let sysModule = SystemControlModule()
+        
+        let allModules: [ToolProvider] = [basicModule, fsModule, codeModule, memoryModule, sysModule]
+        let registry = ToolRegistry(providers: allModules)
+        let executor = ToolExecutor(registry: registry, providers: allModules)
         return AIToolExecutor { step in
             let arguments = try parseArguments(step.argumentsJSON)
             let result = try await executor.execute(toolName: step.toolName, arguments: arguments)

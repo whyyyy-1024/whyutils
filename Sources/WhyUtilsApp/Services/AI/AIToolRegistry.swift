@@ -20,7 +20,13 @@ struct AIToolRegistry {
     
     private init(accessMode: AIAgentAccessMode) {
         let basicModule = BasicToolModule(accessMode: accessMode)
-        let registry = ToolRegistry(providers: [basicModule])
+        let fsModule = FileSystemModule()
+        let codeModule = CodeEditModule()
+        let memoryModule = MemoryModule()
+        let sysModule = SystemControlModule()
+        
+        let allModules: [ToolProvider] = [basicModule, fsModule, codeModule, memoryModule, sysModule]
+        let registry = ToolRegistry(providers: allModules)
         self.toolRegistry = registry
         self.tools = registry.allTools().map { desc in
             AIToolDescriptor(
