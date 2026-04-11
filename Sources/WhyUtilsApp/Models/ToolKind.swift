@@ -10,6 +10,7 @@ enum ToolKind: String, CaseIterable, Identifiable {
     case base64
     case hash
     case regex
+    case killProcess
 
     var id: String { rawValue }
 
@@ -26,6 +27,7 @@ enum ToolKind: String, CaseIterable, Identifiable {
         case .base64: return "Base64"
         case .hash: return L10n.text("Hash", "哈希", language: language)
         case .regex: return L10n.text("Regex Tester", "正则测试器", language: language)
+        case .killProcess: return L10n.text("Kill Process", "终止进程", language: language)
         }
     }
 
@@ -42,6 +44,7 @@ enum ToolKind: String, CaseIterable, Identifiable {
         case .base64: return L10n.text("Text Base64 encode/decode", "文本 Base64 编解码", language: language)
         case .hash: return L10n.text("SHA/MD5 digest", "SHA/MD5 摘要计算", language: language)
         case .regex: return L10n.text("Match and replace preview", "匹配与替换预览", language: language)
+        case .killProcess: return L10n.text("Search and terminate running processes", "搜索并终止运行中的进程", language: language)
         }
     }
 
@@ -56,6 +59,7 @@ enum ToolKind: String, CaseIterable, Identifiable {
         case .base64: return "number.square.fill"
         case .hash: return "number.square"
         case .regex: return "text.magnifyingglass"
+        case .killProcess: return "xmark.circle"
         }
     }
 

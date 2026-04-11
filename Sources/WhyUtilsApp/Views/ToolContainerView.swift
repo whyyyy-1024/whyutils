@@ -67,6 +67,8 @@ struct ToolContainerView: View {
                             EmptyView()
                         case .json:
                             JSONToolView()
+                        case .killProcess:
+                            KillProcessToolView()
                         case .time:
                             TimeToolView()
                         case .url:
