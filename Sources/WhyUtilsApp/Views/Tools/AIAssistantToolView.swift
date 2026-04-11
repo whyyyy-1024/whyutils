@@ -465,6 +465,7 @@ struct AIAssistantToolView: View {
                     }
                 }
             )
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .contextMenu {
@@ -1155,6 +1156,7 @@ private struct ChatInputEditor: NSViewRepresentable {
         textView.delegate = context.coordinator
         textView.onSubmit = onSubmit
         textView.onPasteImage = onPasteImage
+        textView.onFocusGained = context.coordinator.handleFocusGained
         textView.drawsBackground = false
         textView.isRichText = false
         textView.isAutomaticQuoteSubstitutionEnabled = false
@@ -1178,6 +1180,7 @@ private struct ChatInputEditor: NSViewRepresentable {
         }
         textView.onSubmit = onSubmit
         textView.onPasteImage = onPasteImage
+        textView.onFocusGained = context.coordinator.handleFocusGained
         if focusRequest, textView.window?.firstResponder !== textView {
             DispatchQueue.main.async {
                 textView.window?.makeFirstResponder(textView)
@@ -1205,6 +1208,10 @@ private struct ChatInputEditor: NSViewRepresentable {
             self.onSubmit = onSubmit
         }
 
+        func handleFocusGained() {
+            isFocused = true
+        }
+
         func textDidChange(_ notification: Notification) {
             guard let textView else { return }
             text = textView.string
@@ -1223,6 +1230,15 @@ private struct ChatInputEditor: NSViewRepresentable {
 private final class SubmitAwareTextView: NSTextView {
     var onSubmit: (() -> Void)?
     var onPasteImage: ((AIChatImageAttachment) -> Void)?
+    var onFocusGained: (() -> Void)?
+
+    override func becomeFirstResponder() -> Bool {
+        let result = super.becomeFirstResponder()
+        if result {
+            onFocusGained?()
+        }
+        return result
+    }
 
     override func keyDown(with event: NSEvent) {
         let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
