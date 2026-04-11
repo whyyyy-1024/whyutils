@@ -17,6 +17,9 @@ struct ToolContainerView: View {
             } else if tool == .aiAssistant {
                 AIAssistantToolView()
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            } else if tool == .killProcess {
+                KillProcessToolView()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             } else {
                 VStack(spacing: 0) {
                     HStack(spacing: 10) {
@@ -65,10 +68,10 @@ struct ToolContainerView: View {
                             EmptyView()
                         case .searchFiles:
                             EmptyView()
+                        case .killProcess:
+                            EmptyView()
                         case .json:
                             JSONToolView()
-                        case .killProcess:
-                            KillProcessToolView()
                         case .time:
                             TimeToolView()
                         case .url:
