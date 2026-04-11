@@ -71,7 +71,7 @@ final class ClipboardHistoryService: ObservableObject {
 
     @Published private(set) var entries: [ClipboardHistoryEntry] = []
 
-    private let maxItems = 200
+    private let maxItems = 1000
     private let storageKey = "whyutils.clipboard.history"
     private var timer: Timer?
     private var lastChangeCount: Int
