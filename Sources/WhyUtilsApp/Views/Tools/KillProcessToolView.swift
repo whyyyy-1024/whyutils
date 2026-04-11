@@ -39,9 +39,6 @@ struct KillProcessToolView: View {
             actionBar
         }
         .onAppear {
-            if !coordinator.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                query = coordinator.query
-            }
             focusSearch = true
             refreshProcesses()
             installKeyMonitor()
