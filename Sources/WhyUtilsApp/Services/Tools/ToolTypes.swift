@@ -63,7 +63,7 @@ struct ToolResult: Codable, Equatable, Sendable {
     let success: Bool
 }
 
-enum ToolError: LocalizedError, Sendable {
+enum ToolError: LocalizedError, Sendable, Equatable {
     case unknownTool(String)
     case providerNotFound(String)
     case invalidArgument(String)
