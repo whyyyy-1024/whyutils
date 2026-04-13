@@ -223,26 +223,52 @@ final class AIChatWorkspaceStore: ObservableObject {
     }
 
     private func bootstrap() {
-        guard
-            let data = persistence.load(),
-            let decoded = try? JSONDecoder().decode([AIThread].self, from: data),
-            decoded.isEmpty == false
-        else {
-            createNewThread(directory: "")
+        if let data = persistence.load(),
+           let decoded = try? JSONDecoder().decode([AIThread].self, from: data),
+           decoded.isEmpty == false {
+            threads = decoded.map { thread in
+                var normalizedThread = thread
+                normalizedThread.chats = thread.chats.map { $0.normalizedForPersistence() }
+                return normalizedThread
+            }
+            sortThreads()
+            activeThreadID = threads.first?.id
+            activeChatID = threads.first?.chats.first?.id
+            syncSessions()
+            persist()
+            return
+        }
+
+        if migrateFromLegacySessions() {
             syncSessions()
             return
         }
 
-        threads = decoded.map { thread in
-            var normalizedThread = thread
-            normalizedThread.chats = thread.chats.map { $0.normalizedForPersistence() }
-            return normalizedThread
-        }
-        sortThreads()
-        activeThreadID = threads.first?.id
-        activeChatID = threads.first?.chats.first?.id
+        createNewThread(directory: "")
         syncSessions()
+    }
+
+    private func migrateFromLegacySessions() -> Bool {
+        guard let legacyData = UserDefaults.standard.data(forKey: "whyutils.ai.chat.sessions"),
+              let legacySessions = try? JSONDecoder().decode([AIChatSession].self, from: legacyData),
+              legacySessions.isEmpty == false else {
+            return false
+        }
+
+        let nowDate = now()
+        var legacyThread = AIThread.create(workingDirectory: "", now: nowDate)
+        legacyThread.title = "Legacy Session"
+        legacyThread.chats = legacySessions.map { $0.normalizedForPersistence() }
+        legacyThread.updatedAt = legacySessions.map { $0.updatedAt }.max() ?? nowDate
+
+        threads = [legacyThread]
+        sortThreads()
+        activeThreadID = legacyThread.id
+        activeChatID = legacyThread.chats.first?.id
+
+        UserDefaults.standard.removeObject(forKey: "whyutils.ai.chat.sessions")
         persist()
+        return true
     }
 
     private func persist() {

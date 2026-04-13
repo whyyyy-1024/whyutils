@@ -434,6 +434,10 @@ struct AIAssistantToolView: View {
                 if message.toolTraces.isEmpty == false {
                     toolTraceSection(message)
                 }
+                
+                if message.role == .assistant && FileChangeTracker.shared.currentSummary.hasChanges {
+                    fileChangeSummaryView(FileChangeTracker.shared.currentSummary)
+                }
             }
             .padding(message.role == .user ? 12 : 0)
             .background(messageBubbleBackground(for: message.role))
@@ -495,6 +499,77 @@ struct AIAssistantToolView: View {
                 }
             }
         }
+    }
+
+    private func fileChangeSummaryView(_ summary: FileChangeSummary) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                .font(.system(size: 12, weight: .regular, design: .monospaced))
+                .foregroundStyle(.secondary)
+
+            Text(coordinator.localized("📝 本次操作变更：", "📝 本次操作变更："))
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.primary)
+
+            if !summary.modifiedFiles.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(coordinator.localized("✏️ 修改文件 (\(summary.modifiedFiles.count)个):", "✏️ 修改文件 (\(summary.modifiedFiles.count)个):"))
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.orange)
+
+                    ForEach(summary.modifiedFiles, id: \.path) { record in
+                        let shortPath = URL(fileURLWithPath: record.path).lastPathComponent
+                        Text("   \(shortPath) (+\(record.linesAdded)/-\(record.linesRemoved))")
+                            .font(.system(size: 11, weight: .medium, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+
+            if !summary.createdFiles.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(coordinator.localized("➕ 新增文件 (\(summary.createdFiles.count)个):", "➕ 新增文件 (\(summary.createdFiles.count)个):"))
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.green)
+
+                    ForEach(summary.createdFiles, id: \.self) { path in
+                        let shortPath = URL(fileURLWithPath: path).lastPathComponent
+                        Text("   \(shortPath)")
+                            .font(.system(size: 11, weight: .medium, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+
+            if !summary.deletedFiles.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(coordinator.localized("❌ 删除文件 (\(summary.deletedFiles.count)个):", "❌ 删除文件 (\(summary.deletedFiles.count)个):"))
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.red)
+
+                    ForEach(summary.deletedFiles, id: \.self) { path in
+                        let shortPath = URL(fileURLWithPath: path).lastPathComponent
+                        Text("   \(shortPath)")
+                            .font(.system(size: 11, weight: .medium, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+
+            Text(coordinator.localized("📊 总计: +\(summary.totalLinesAdded)行 / -\(summary.totalLinesRemoved)行", "📊 总计: +\(summary.totalLinesAdded)行 / -\(summary.totalLinesRemoved)行"))
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.primary)
+
+            Text("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                .font(.system(size: 12, weight: .regular, design: .monospaced))
+                .foregroundStyle(.secondary)
+        }
+        .padding(12)
+        .background(Color.whyControlBackground.opacity(0.42), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color.whyPanelBorder.opacity(0.72), lineWidth: 1)
+        )
     }
 
     private func imageAttachmentGallery(_ attachments: [AIChatImageAttachment]) -> some View {
