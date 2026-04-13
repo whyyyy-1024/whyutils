@@ -136,18 +136,20 @@ struct AIExecutionPlan: Codable, Equatable, Sendable {
 }
 
 struct AIAgentContext: Equatable, Sendable {
-    let latestClipboardText: String?
-    let recentClipboardTexts: [String]
-    let pasteTargetAppName: String
-    let storedMemories: [String]
+     let latestClipboardText: String?
+     let recentClipboardTexts: [String]
+     let pasteTargetAppName: String
+     let storedMemories: [String]
+     let workingDirectory: String
 
-    static let empty = AIAgentContext(
-        latestClipboardText: nil,
-        recentClipboardTexts: [],
-        pasteTargetAppName: "Current App",
-        storedMemories: []
-    )
-}
+     static let empty = AIAgentContext(
+         latestClipboardText: nil,
+         recentClipboardTexts: [],
+         pasteTargetAppName: "Current App",
+         storedMemories: [],
+         workingDirectory: ""
+     )
+ }
 
 struct AIConfirmationRequest: Codable, Equatable, Sendable {
     let plan: AIExecutionPlan

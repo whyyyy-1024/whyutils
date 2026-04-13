@@ -2,11 +2,6 @@ import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
-private struct SessionRenameDraft: Identifiable {
-    let id: UUID
-    var title: String
-}
-
 struct AIAssistantToolView: View {
     @EnvironmentObject private var coordinator: AppCoordinator
 
@@ -15,8 +10,7 @@ struct AIAssistantToolView: View {
     @State private var state: AIAgentExecutionState = .idle
     @State private var expandedTraceMessageIDs = Set<UUID>()
     @State private var activeStreamTask: Task<Void, Never>?
-    @State private var renameDraft: SessionRenameDraft?
-    @State private var deleteSession: AIChatSession?
+    @State private var activeBranch: String?
     @State private var composerShouldFocus: Bool = true
     @State private var composerIsFocused: Bool = false
     @State private var pendingImageAttachment: AIChatImageAttachment?
@@ -38,12 +32,16 @@ struct AIAssistantToolView: View {
         coordinator.aiConfiguration.accessMode
     }
 
-    private var activeSession: AIChatSession? {
-        workspace.activeSession
+    private var activeThread: AIThread? {
+        workspace.activeThread
+    }
+
+    private var activeChat: AIChatSession? {
+        workspace.activeChat
     }
 
     private var activeMessages: [AIChatMessageRecord] {
-        activeSession?.messages ?? []
+        activeChat?.messages ?? []
     }
 
     private var isStreaming: Bool {
@@ -52,70 +50,27 @@ struct AIAssistantToolView: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            sidebar
+            AIThreadListView(workspace: workspace)
             Divider()
             mainPane
         }
         .background(Color.whyPanelBackground)
-        .sheet(item: $renameDraft) { draft in
-            renameSheet(for: draft)
-        }
-        .alert(item: $deleteSession) { session in
-            Alert(
-                title: Text(coordinator.localized("Delete conversation?", "删除会话？")),
-                message: Text(session.displayTitle),
-                primaryButton: .destructive(Text(coordinator.localized("Delete", "删除"))) {
-                    workspace.deleteSession(id: session.id)
-                },
-                secondaryButton: .cancel()
-            )
-        }
         .onAppear {
-            consumeDraftTaskIfNeeded(forceNewSession: false)
+            consumeDraftTaskIfNeeded(forceNewChat: false)
         }
         .onChange(of: coordinator.aiDraftTask) { _ in
-            consumeDraftTaskIfNeeded(forceNewSession: true)
+            consumeDraftTaskIfNeeded(forceNewChat: true)
+        }
+        .onChange(of: workspace.activeThreadID) { _ in
+            refreshBranch()
+        }
+        .task(id: workspace.activeThread?.workingDirectory) {
+            refreshBranch()
         }
         .onDisappear {
             activeStreamTask?.cancel()
             activeStreamTask = nil
         }
-    }
-
-    private var sidebar: some View {
-        VStack(spacing: 0) {
-            HStack {
-                Button {
-                    workspace.createNewSession()
-                    composerText = ""
-                    composerShouldFocus = true
-                } label: {
-                    Label(coordinator.localized("New chat", "新建会话"), systemImage: "square.and.pencil")
-                        .font(.system(size: 12, weight: .semibold))
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.plain)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 9)
-                .background(Color.whyControlBackground, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                .disabled(isStreaming)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 12)
-
-            Divider()
-
-            ScrollView {
-                LazyVStack(spacing: 6) {
-                    ForEach(workspace.sessions) { session in
-                        sessionRow(session)
-                    }
-                }
-                .padding(10)
-            }
-        }
-        .frame(width: 204)
-        .background(Color.whySidebarBackground)
     }
 
     private var mainPane: some View {
@@ -140,7 +95,7 @@ struct AIAssistantToolView: View {
                         }
                     }
                 }
-                .onChange(of: activeSession?.id) { _ in
+                .onChange(of: activeChat?.id) { _ in
                     scrollToBottom(proxy: proxy)
                 }
                 .onChange(of: activeMessages.count) { _ in
@@ -160,12 +115,52 @@ struct AIAssistantToolView: View {
     private var topBar: some View {
         HStack(alignment: .center, spacing: 16) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(activeSession?.displayTitle ?? coordinator.localized("New chat", "新建会话"))
+                Text(activeChat?.displayTitle ?? coordinator.localized("New chat", "新建会话"))
                     .font(.system(size: 16, weight: .semibold))
                     .lineLimit(1)
                     .truncationMode(.tail)
 
                 HStack(spacing: 6) {
+                    if let workingDirectory = activeThread?.workingDirectory, workingDirectory.isEmpty == false {
+                        let displayDir = URL(fileURLWithPath: workingDirectory).lastPathComponent
+                        HStack(spacing: 4) {
+                            Image(systemName: "folder.fill")
+                                .font(.system(size: 10, weight: .medium))
+                            Text(displayDir)
+                                .font(.system(size: 10, weight: .medium))
+                        }
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .background(Color.whyControlBackground.opacity(0.52), in: Capsule())
+                    }
+
+                    if let branch = activeBranch {
+                        HStack(spacing: 4) {
+                            Image(systemName: "leaf.fill")
+                                .font(.system(size: 10, weight: .medium))
+                            Text(branch)
+                                .font(.system(size: 10, weight: .medium))
+                        }
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .background(Color.green.opacity(0.85), in: Capsule())
+                    }
+
+                    if let summary = activeChat?.fileChangeSummary, summary.hasChanges {
+                        HStack(spacing: 4) {
+                            Image(systemName: "doc.text.fill")
+                                .font(.system(size: 10, weight: .medium))
+                            Text(summary.summaryText)
+                                .font(.system(size: 10, weight: .medium))
+                        }
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .background(Color.whyControlBackground.opacity(0.52), in: Capsule())
+                    }
+
                     Circle()
                         .fill(aiConfigured ? accessModeColor.opacity(0.9) : Color.orange.opacity(0.95))
                         .frame(width: 6, height: 6)
@@ -233,37 +228,6 @@ struct AIAssistantToolView: View {
                         .stroke(Color.whyPanelBorder.opacity(0.72), lineWidth: 1)
                 )
                 .frame(maxWidth: 190)
-
-                if let session = activeSession {
-                    Menu {
-                        Button(coordinator.localized("AI Settings", "AI 设置")) {
-                            coordinator.showSettings = true
-                        }
-                        Divider()
-                        Button(coordinator.localized("Rename", "重命名")) {
-                            renameDraft = SessionRenameDraft(id: session.id, title: session.title.isEmpty ? session.displayTitle : session.title)
-                        }
-                        Button(coordinator.localized("Delete", "删除"), role: .destructive) {
-                            deleteSession = session
-                        }
-                    } label: {
-                        Image(systemName: "ellipsis")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(.secondary)
-                            .frame(width: 30, height: 30)
-                            .background(
-                                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                    .fill(Color.whyControlBackground.opacity(0.42))
-                            )
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                    .stroke(Color.whyPanelBorder.opacity(0.72), lineWidth: 1)
-                            )
-                    }
-                    .menuStyle(.borderlessButton)
-                    .menuIndicator(.hidden)
-                    .fixedSize()
-                }
             }
         }
         .padding(.horizontal, 16)
@@ -425,57 +389,6 @@ struct AIAssistantToolView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .background(Color.whyControlBackground.opacity(0.42), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-    }
-
-    private func sessionRow(_ session: AIChatSession) -> some View {
-        let isSelected = session.id == activeSession?.id
-        return Button {
-            workspace.selectSession(id: session.id)
-        } label: {
-            HStack(alignment: .top, spacing: 8) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(session.displayTitle)
-                        .font(.system(size: 13, weight: isSelected ? .semibold : .medium))
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-                    Text(formattedTimestamp(session.updatedAt))
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(.secondary)
-                }
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                Group {
-                    if isSelected {
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .fill(Color.whyControlBackground.opacity(0.78))
-                            .overlay(alignment: .leading) {
-                                RoundedRectangle(cornerRadius: 1.5, style: .continuous)
-                                    .fill(Color.teal.opacity(0.95))
-                                    .frame(width: 3)
-                                    .padding(.vertical, 8)
-                                    .padding(.leading, 6)
-                            }
-                    } else {
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .fill(Color.clear)
-                    }
-                }
-            )
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .contextMenu {
-            Button(coordinator.localized("Rename", "重命名")) {
-                renameDraft = SessionRenameDraft(id: session.id, title: session.title.isEmpty ? session.displayTitle : session.title)
-            }
-            Button(coordinator.localized("Delete", "删除"), role: .destructive) {
-                deleteSession = session
-            }
-        }
     }
 
     private func messageRow(_ message: AIChatMessageRecord) -> some View {
@@ -652,35 +565,6 @@ struct AIAssistantToolView: View {
         )
     }
 
-    private func renameSheet(for draft: SessionRenameDraft) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text(coordinator.localized("Rename conversation", "重命名会话"))
-                .font(.system(size: 18, weight: .semibold))
-
-            TextField(coordinator.localized("Conversation title", "会话标题"), text: Binding(
-                get: { renameDraft?.title ?? draft.title },
-                set: { renameDraft = SessionRenameDraft(id: draft.id, title: $0) }
-            ))
-            .textFieldStyle(.roundedBorder)
-
-            HStack {
-                Spacer()
-                Button(coordinator.localized("Cancel", "取消")) {
-                    renameDraft = nil
-                }
-                Button(coordinator.localized("Save", "保存")) {
-                    guard let renameDraft else { return }
-                    workspace.renameSession(id: renameDraft.id, title: renameDraft.title)
-                    self.renameDraft = nil
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(.teal)
-            }
-        }
-        .padding(20)
-        .frame(width: 360)
-    }
-
     private func submitTask() {
         let trimmed = composerText.trimmingCharacters(in: .whitespacesAndNewlines)
         let attachments = pendingImageAttachment.map { [$0] } ?? []
@@ -688,21 +572,21 @@ struct AIAssistantToolView: View {
         guard isStreaming == false else { return }
 
         guard aiConfigured else {
-            let sessionID = activeSession?.id ?? createSessionIfNeeded()
-            _ = workspace.appendMessage(role: .user, text: trimmed, imageAttachments: attachments, sessionID: sessionID)
+            let chatID = activeChat?.id ?? createChatIfNeeded()
+            _ = workspace.appendMessage(role: .user, text: trimmed, imageAttachments: attachments, chatID: chatID)
             workspace.appendMessage(
                 role: .assistant,
                 text: coordinator.localized(
                     "Please finish AI configuration in Settings before sending messages.",
                     "请先在设置里完成 AI 配置，再发送消息。"
                 ),
-                sessionID: sessionID
+                chatID: chatID
             )
             composerText = ""
             return
         }
 
-        let sessionID = activeSession?.id ?? createSessionIfNeeded()
+        let chatID = activeChat?.id ?? createChatIfNeeded()
         let task = trimmed.isEmpty
             ? coordinator.localized("Please analyze the attached image.", "请分析这张附带的图片。")
             : trimmed
@@ -713,9 +597,9 @@ struct AIAssistantToolView: View {
         pendingImageAttachment = nil
         state = .planning
 
-        _ = workspace.appendMessage(role: .user, text: task, imageAttachments: attachments, sessionID: sessionID)
-        let history = buildConversationHistory(sessionID: sessionID)
-        let assistantMessageID = workspace.appendMessage(role: .assistant, text: "", isStreaming: true, sessionID: sessionID)
+        _ = workspace.appendMessage(role: .user, text: task, imageAttachments: attachments, chatID: chatID)
+        let history = buildConversationHistory(chatID: chatID)
+        let assistantMessageID = workspace.appendMessage(role: .assistant, text: "", isStreaming: true, chatID: chatID)
         let service = AIAgentService.live(configuration: configuration)
 
         let taskHandle = Task {
@@ -738,11 +622,11 @@ struct AIAssistantToolView: View {
                             "我已经生成执行方案，但其中包含副作用动作，需要你确认后我再继续。"
                         ),
                         into: assistantMessageID,
-                        sessionID: sessionID
+                        chatID: chatID
                     )
                     await MainActor.run {
                         workspace.updateMessage(
-                            sessionID: sessionID,
+                            chatID: chatID,
                             messageID: assistantMessageID,
                             confirmationRequest: .some(request),
                             isStreaming: false
@@ -754,7 +638,7 @@ struct AIAssistantToolView: View {
                     if run.traces.isEmpty == false {
                         await MainActor.run {
                             workspace.updateMessage(
-                                sessionID: sessionID,
+                                chatID: chatID,
                                 messageID: assistantMessageID,
                                 toolTraces: run.traces
                             )
@@ -768,7 +652,7 @@ struct AIAssistantToolView: View {
                             ),
                             fallback: run.finalMessage,
                             into: assistantMessageID,
-                            sessionID: sessionID
+                            chatID: chatID
                         )
                     } else {
                         await streamAssistantResponse(
@@ -780,7 +664,7 @@ struct AIAssistantToolView: View {
                             ),
                             fallback: run.finalMessage,
                             into: assistantMessageID,
-                            sessionID: sessionID
+                            chatID: chatID
                         )
                     }
                     await MainActor.run {
@@ -790,14 +674,14 @@ struct AIAssistantToolView: View {
                 }
             } catch is CancellationError {
                 await MainActor.run {
-                    workspace.updateMessage(sessionID: sessionID, messageID: assistantMessageID, isStreaming: false)
+                    workspace.updateMessage(chatID: chatID, messageID: assistantMessageID, isStreaming: false)
                     state = .idle
                     activeStreamTask = nil
                 }
             } catch {
                 await MainActor.run {
                     workspace.updateMessage(
-                        sessionID: sessionID,
+                        chatID: chatID,
                         messageID: assistantMessageID,
                         text: error.localizedDescription,
                         isStreaming: false
@@ -812,18 +696,18 @@ struct AIAssistantToolView: View {
     }
 
     private func confirmPendingPlan(for messageID: UUID, request: AIConfirmationRequest) {
-        guard let sessionID = activeSession?.id else { return }
+        guard let chatID = activeChat?.id else { return }
         let configuration = coordinator.aiConfiguration
         let service = AIAgentService.live(configuration: configuration)
-        let history = buildConversationHistory(sessionID: sessionID)
+        let history = buildConversationHistory(chatID: chatID)
 
         state = .executing
         let taskHandle = Task {
             do {
                 let run = try await service.confirm(request, configuration: configuration)
                 await MainActor.run {
-                    workspace.removeConfirmation(sessionID: sessionID, messageID: messageID)
-                    workspace.updateMessage(sessionID: sessionID, messageID: messageID, toolTraces: run.traces, isStreaming: true)
+                    workspace.removeConfirmation(chatID: chatID, messageID: messageID)
+                    workspace.updateMessage(chatID: chatID, messageID: messageID, toolTraces: run.traces, isStreaming: true)
                 }
                 await streamAssistantResponse(
                     from: service.streamRunSummary(
@@ -834,7 +718,7 @@ struct AIAssistantToolView: View {
                     ),
                     fallback: run.finalMessage,
                     into: messageID,
-                    sessionID: sessionID
+                    chatID: chatID
                 )
                 await MainActor.run {
                     state = .completed
@@ -842,14 +726,14 @@ struct AIAssistantToolView: View {
                 }
             } catch is CancellationError {
                 await MainActor.run {
-                    workspace.updateMessage(sessionID: sessionID, messageID: messageID, isStreaming: false)
+                    workspace.updateMessage(chatID: chatID, messageID: messageID, isStreaming: false)
                     state = .idle
                     activeStreamTask = nil
                 }
             } catch {
                 await MainActor.run {
                     workspace.updateMessage(
-                        sessionID: sessionID,
+                        chatID: chatID,
                         messageID: messageID,
                         text: error.localizedDescription,
                         isStreaming: false
@@ -864,10 +748,10 @@ struct AIAssistantToolView: View {
     }
 
     private func cancelPendingPlan(for messageID: UUID) {
-        guard let sessionID = activeSession?.id else { return }
-        workspace.removeConfirmation(sessionID: sessionID, messageID: messageID)
+        guard let chatID = activeChat?.id else { return }
+        workspace.removeConfirmation(chatID: chatID, messageID: messageID)
         workspace.updateMessage(
-            sessionID: sessionID,
+            chatID: chatID,
             messageID: messageID,
             text: coordinator.localized("Execution canceled.", "已取消执行。"),
             isStreaming: false
@@ -881,10 +765,20 @@ struct AIAssistantToolView: View {
         state = .idle
     }
 
-    private func consumeDraftTaskIfNeeded(forceNewSession: Bool) {
+    private func refreshBranch() {
+        Task {
+            if let dir = activeThread?.workingDirectory, dir.isEmpty == false {
+                activeBranch = await GitService.detectBranch(directory: dir)
+            } else {
+                activeBranch = nil
+            }
+        }
+    }
+
+    private func consumeDraftTaskIfNeeded(forceNewChat: Bool) {
         let draft = coordinator.aiDraftTask.trimmingCharacters(in: .whitespacesAndNewlines)
         guard draft.isEmpty == false else { return }
-        if forceNewSession || (activeSession?.messages.isEmpty == false) || composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false {
+        if forceNewChat || (activeChat?.messages.isEmpty == false) || composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false {
             workspace.createNewSession()
         }
         composerText = draft
@@ -900,26 +794,30 @@ struct AIAssistantToolView: View {
             .map(AIToolExecutor.redactSensitiveText)
 
         let memories = MemoryModule.loadMemorySummaries(limit: 10)
+        let workingDirectory = activeThread?.workingDirectory ?? ""
 
         return AIAgentContext(
             latestClipboardText: textEntries.first,
             recentClipboardTexts: Array(textEntries.prefix(5)),
             pasteTargetAppName: coordinator.pasteTargetAppName,
-            storedMemories: memories
+            storedMemories: memories,
+            workingDirectory: workingDirectory
         )
     }
 
-    private func buildConversationHistory(sessionID: UUID) -> [OpenAIChatMessage] {
-        workspace.sessions
-            .first(where: { $0.id == sessionID })?
-            .messages
-            .compactMap { message in
-                guard message.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
-                    || message.imageAttachments.isEmpty == false else {
-                    return nil
+    private func buildConversationHistory(chatID: UUID) -> [OpenAIChatMessage] {
+        for thread in workspace.threads {
+            if let chat = thread.chats.first(where: { $0.id == chatID }) {
+                return chat.messages.compactMap { message in
+                    guard message.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+                        || message.imageAttachments.isEmpty == false else {
+                        return nil
+                    }
+                    return message.openAIMessage
                 }
-                return message.openAIMessage
-            } ?? []
+            }
+        }
+        return []
     }
 
     private func attachImage(_ attachment: AIChatImageAttachment) {
@@ -979,9 +877,9 @@ struct AIAssistantToolView: View {
         }
     }
 
-    private func streamAssistantText(_ text: String, into messageID: UUID, sessionID: UUID) async {
+    private func streamAssistantText(_ text: String, into messageID: UUID, chatID: UUID) async {
         await MainActor.run {
-            workspace.updateMessage(sessionID: sessionID, messageID: messageID, text: "", isStreaming: true)
+            workspace.updateMessage(chatID: chatID, messageID: messageID, text: "", isStreaming: true)
         }
 
         var collected = ""
@@ -989,13 +887,13 @@ struct AIAssistantToolView: View {
             if Task.isCancelled { break }
             collected.append(character)
             await MainActor.run {
-                workspace.updateMessage(sessionID: sessionID, messageID: messageID, text: collected, isStreaming: true)
+                workspace.updateMessage(chatID: chatID, messageID: messageID, text: collected, isStreaming: true)
             }
             try? await Task.sleep(nanoseconds: 8_000_000)
         }
 
         await MainActor.run {
-            workspace.updateMessage(sessionID: sessionID, messageID: messageID, text: collected, isStreaming: false)
+            workspace.updateMessage(chatID: chatID, messageID: messageID, text: collected, isStreaming: false)
         }
     }
 
@@ -1003,10 +901,10 @@ struct AIAssistantToolView: View {
         from stream: AsyncThrowingStream<String, Error>,
         fallback: String,
         into messageID: UUID,
-        sessionID: UUID
+        chatID: UUID
     ) async {
         await MainActor.run {
-            workspace.updateMessage(sessionID: sessionID, messageID: messageID, text: "", isStreaming: true)
+            workspace.updateMessage(chatID: chatID, messageID: messageID, text: "", isStreaming: true)
         }
 
         var collected = ""
@@ -1015,13 +913,13 @@ struct AIAssistantToolView: View {
                 if Task.isCancelled { throw CancellationError() }
                 collected += chunk
                 await MainActor.run {
-                    workspace.updateMessage(sessionID: sessionID, messageID: messageID, text: collected, isStreaming: true)
+                    workspace.updateMessage(chatID: chatID, messageID: messageID, text: collected, isStreaming: true)
                 }
             }
 
             await MainActor.run {
                 workspace.updateMessage(
-                    sessionID: sessionID,
+                    chatID: chatID,
                     messageID: messageID,
                     text: collected.isEmpty ? fallback : collected,
                     isStreaming: false
@@ -1029,12 +927,12 @@ struct AIAssistantToolView: View {
             }
         } catch is CancellationError {
             await MainActor.run {
-                workspace.updateMessage(sessionID: sessionID, messageID: messageID, isStreaming: false)
+                workspace.updateMessage(chatID: chatID, messageID: messageID, isStreaming: false)
             }
         } catch {
             await MainActor.run {
                 workspace.updateMessage(
-                    sessionID: sessionID,
+                    chatID: chatID,
                     messageID: messageID,
                     text: collected.isEmpty ? fallback : collected,
                     isStreaming: false
@@ -1043,10 +941,10 @@ struct AIAssistantToolView: View {
         }
     }
 
-    private func createSessionIfNeeded() -> UUID {
-        if let active = activeSession?.id { return active }
+    private func createChatIfNeeded() -> UUID {
+        if let active = activeChat?.id { return active }
         workspace.createNewSession()
-        return workspace.activeSession?.id ?? UUID()
+        return workspace.activeChat?.id ?? UUID()
     }
 
     private func scrollToBottom(proxy: ScrollViewProxy) {
