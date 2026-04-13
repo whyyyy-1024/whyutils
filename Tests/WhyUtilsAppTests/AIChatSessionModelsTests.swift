@@ -83,6 +83,12 @@ struct AIChatSessionModelsTests {
     }
 
     @Test
+    func emptySessionHasEmptyFileChangeSummary() {
+        let session = AIChatSession.empty()
+        #expect(session.fileChangeSummary.hasChanges == false)
+    }
+
+    @Test
     func userMessageWithImageBuildsMultimodalOpenAIMessage() {
         let attachment = AIChatImageAttachment(
             pngData: Data([0x89, 0x50, 0x4E, 0x47]),

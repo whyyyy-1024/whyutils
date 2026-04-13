@@ -70,6 +70,7 @@ struct AIChatSession: Codable, Equatable, Identifiable, Sendable {
     let createdAt: Date
     var updatedAt: Date
     var messages: [AIChatMessageRecord]
+    var fileChangeSummary: FileChangeSummary
 
     init(
         id: UUID = UUID(),
@@ -77,7 +78,8 @@ struct AIChatSession: Codable, Equatable, Identifiable, Sendable {
         isUserRenamed: Bool,
         createdAt: Date,
         updatedAt: Date,
-        messages: [AIChatMessageRecord]
+        messages: [AIChatMessageRecord],
+        fileChangeSummary: FileChangeSummary = FileChangeSummary()
     ) {
         self.id = id
         self.title = title
@@ -85,6 +87,7 @@ struct AIChatSession: Codable, Equatable, Identifiable, Sendable {
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.messages = messages
+        self.fileChangeSummary = fileChangeSummary
     }
 
     static func empty(id: UUID = UUID(), now: Date = Date()) -> AIChatSession {
@@ -94,7 +97,8 @@ struct AIChatSession: Codable, Equatable, Identifiable, Sendable {
             isUserRenamed: false,
             createdAt: now,
             updatedAt: now,
-            messages: []
+            messages: [],
+            fileChangeSummary: FileChangeSummary()
         )
     }
 
