@@ -29,13 +29,25 @@ struct MemoryModule: ToolProvider {
     let providerId = "memory"
     private let storagePath: String
     
+    static let defaultStoragePath: String = {
+        let supportDir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        return supportDir.appendingPathComponent("WhyUtils/memory_store.json").path
+    }()
+    
     init(storagePath: String? = nil) {
         if let storagePath {
             self.storagePath = storagePath
         } else {
-            let supportDir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-            self.storagePath = supportDir.appendingPathComponent("WhyUtils/memory_store.json").path
+            self.storagePath = Self.defaultStoragePath
         }
+    }
+    
+    static func loadMemorySummaries(limit: Int = 10) -> [String] {
+        let url = URL(fileURLWithPath: defaultStoragePath)
+        guard FileManager.default.fileExists(atPath: defaultStoragePath) else { return [] }
+        guard let data = try? Data(contentsOf: url) else { return [] }
+        guard let memories = try? JSONDecoder().decode([MemoryEntry].self, from: data) else { return [] }
+        return memories.suffix(limit).map { $0.content }
     }
     
     func tools() -> [ToolDescriptor] {

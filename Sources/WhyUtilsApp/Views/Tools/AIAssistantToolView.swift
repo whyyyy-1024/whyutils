@@ -899,10 +899,13 @@ struct AIAssistantToolView: View {
             .map(\.text)
             .map(AIToolExecutor.redactSensitiveText)
 
+        let memories = MemoryModule.loadMemorySummaries(limit: 10)
+
         return AIAgentContext(
             latestClipboardText: textEntries.first,
             recentClipboardTexts: Array(textEntries.prefix(5)),
-            pasteTargetAppName: coordinator.pasteTargetAppName
+            pasteTargetAppName: coordinator.pasteTargetAppName,
+            storedMemories: memories
         )
     }
 

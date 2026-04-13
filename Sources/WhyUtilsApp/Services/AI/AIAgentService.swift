@@ -311,6 +311,7 @@ struct AIAgentService: Sendable {
         let conversationSummary = conversation.suffix(8).map { message in
             "\(message.role): \(message.content)"
         }.joined(separator: "\n")
+        let memoryContext = context.storedMemories.isEmpty ? "none" : context.storedMemories.joined(separator: "\n")
 
         let systemPrompt = """
         You are an AI assistant for WhyUtils.
@@ -325,8 +326,20 @@ struct AIAgentService: Sendable {
         - Tool plans must use 1 to \(maxPlanSteps) steps.
         - Only use these tools:
         \(toolLines)
+        - IMPORTANT: Each tool requires specific arguments in argumentsJSON. Common patterns:
+          * list_directory: {"path": "/path/to/dir"}
+          * read_file: {"path": "/path/to/file"}
+          * write_file: {"path": "/path", "content": "text"}
+          * run_shell_command: {"command": "your command"}
+          * fs_create_directory: {"path": "/path"}
+          * fs_delete: {"path": "/path"}
+          * fs_get_info: {"path": "/path"}
+          * code_read_range: {"path": "/path", "lineStart": 1, "lineEnd": 10}
+          * code_outline: {"path": "/path"}
+          * memory_store: {"content": "text to remember", "category": "general"}
+          * memory_retrieve: {"query": "search term"}
         - If a tool uses the latest clipboard text, pass an empty JSON object.
-        - In unrestricted mode, you may use shell and file tools to complete broader local tasks.
+        - Use stored memories to understand user context (e.g., working directory, preferences).
         - Never wrap JSON in markdown fences.
         """
 
@@ -339,6 +352,8 @@ struct AIAgentService: Sendable {
         Recent clipboard text history:
         \(recentClipboard.isEmpty ? "none" : recentClipboard)
         Paste target app name: \(context.pasteTargetAppName)
+        Stored memories:
+        \(memoryContext)
         """
 
         return [

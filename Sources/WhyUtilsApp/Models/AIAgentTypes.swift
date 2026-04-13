@@ -139,11 +139,13 @@ struct AIAgentContext: Equatable, Sendable {
     let latestClipboardText: String?
     let recentClipboardTexts: [String]
     let pasteTargetAppName: String
+    let storedMemories: [String]
 
     static let empty = AIAgentContext(
         latestClipboardText: nil,
         recentClipboardTexts: [],
-        pasteTargetAppName: "Current App"
+        pasteTargetAppName: "Current App",
+        storedMemories: []
     )
 }
 
