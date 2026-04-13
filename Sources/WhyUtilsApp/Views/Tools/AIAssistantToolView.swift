@@ -1019,7 +1019,11 @@ struct AIAssistantToolView: View {
 
     private func createChatIfNeeded() -> UUID {
         if let active = activeChat?.id { return active }
-        workspace.createNewSession()
+        guard let threadID = activeThread?.id else {
+            // No thread selected - user needs to select directory first
+            return UUID()
+        }
+        workspace.createNewChat(in: threadID)
         return workspace.activeChat?.id ?? UUID()
     }
 

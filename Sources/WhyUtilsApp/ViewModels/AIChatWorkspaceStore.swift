@@ -53,13 +53,13 @@ final class AIChatWorkspaceStore: ObservableObject {
     }
 
     func createNewThread(directory: String, select: Bool = true) {
-        let firstChat = AIChatSession.empty(now: now())
         var thread = AIThread.create(workingDirectory: directory, now: now())
-        thread.chats = [firstChat]
+        // Don't auto-create chat - wait for user to send first message
+        thread.chats = []
         threads.insert(thread, at: 0)
         if select {
             activeThreadID = thread.id
-            activeChatID = firstChat.id
+            activeChatID = nil
         }
         persist()
     }

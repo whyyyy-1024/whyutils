@@ -29,6 +29,8 @@ struct AIThreadListView: View {
     @State private var renameChatDraft: ChatRenameDraft?
     @State private var deleteThread: AIThread?
     @State private var deleteChatDraft: DeleteChatDraft?
+    @State private var showDeleteThreadAlert = false
+    @State private var showDeleteChatAlert = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -59,24 +61,34 @@ struct AIThreadListView: View {
         .sheet(item: $renameChatDraft) { draft in
             chatRenameSheet(for: draft)
         }
-        .alert(item: $deleteThread) { thread in
+        .alert(isPresented: $showDeleteThreadAlert) {
             Alert(
                 title: Text(coordinator.localized("Delete thread?", "删除 Thread？")),
-                message: Text(thread.displayName),
+                message: Text(deleteThread?.displayName ?? ""),
                 primaryButton: .destructive(Text(coordinator.localized("Delete", "删除"))) {
-                    workspace.deleteThread(id: thread.id)
+                    if let thread = deleteThread {
+                        workspace.deleteThread(id: thread.id)
+                    }
+                    deleteThread = nil
                 },
-                secondaryButton: .cancel()
+                secondaryButton: .cancel {
+                    deleteThread = nil
+                }
             )
         }
-        .alert(item: $deleteChatDraft) { item in
+        .alert(isPresented: $showDeleteChatAlert) {
             Alert(
                 title: Text(coordinator.localized("Delete chat?", "删除 Chat？")),
-                message: Text(item.chat.displayTitle),
+                message: Text(deleteChatDraft?.chat.displayTitle ?? ""),
                 primaryButton: .destructive(Text(coordinator.localized("Delete", "删除"))) {
-                    workspace.deleteChat(threadID: item.threadID, chatID: item.chat.id)
+                    if let item = deleteChatDraft {
+                        workspace.deleteChat(threadID: item.threadID, chatID: item.chat.id)
+                    }
+                    deleteChatDraft = nil
                 },
-                secondaryButton: .cancel()
+                secondaryButton: .cancel {
+                    deleteChatDraft = nil
+                }
             )
         }
     }
@@ -101,7 +113,6 @@ struct AIThreadListView: View {
             threadRow(thread)
             if expandedThreads.contains(thread.id) {
                 chatRows(thread)
-                newChatButton(thread.id)
             }
         }
         .background(
@@ -172,6 +183,7 @@ struct AIThreadListView: View {
             }
             Button(coordinator.localized("Delete", "删除"), role: .destructive) {
                 deleteThread = thread
+                showDeleteThreadAlert = true
             }
         }
         .task(id: thread.id) {
@@ -240,6 +252,7 @@ struct AIThreadListView: View {
             }
             Button(coordinator.localized("Delete", "删除"), role: .destructive) {
                 deleteChatDraft = DeleteChatDraft(threadID: thread.id, chat: chat)
+                showDeleteChatAlert = true
             }
         }
     }
