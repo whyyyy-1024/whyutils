@@ -96,7 +96,8 @@ final class AIChatWorkspaceStore: ObservableObject {
         let fallbackThread = threads.first(where: { $0.id != id })
         threads.removeAll { $0.id == id }
         if threads.isEmpty {
-            createNewThread(directory: "")
+            activeThreadID = nil
+            activeChatID = nil
         } else if activeThreadID == id {
             activeThreadID = fallbackThread?.id ?? threads.first?.id
             activeChatID = threads.first(where: { $0.id == activeThreadID })?.chats.first?.id

@@ -29,8 +29,6 @@ struct AIThreadListView: View {
     @State private var renameChatDraft: ChatRenameDraft?
     @State private var deleteThread: AIThread?
     @State private var deleteChatDraft: DeleteChatDraft?
-    @State private var showDeleteThreadAlert = false
-    @State private var showDeleteChatAlert = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -61,36 +59,28 @@ struct AIThreadListView: View {
         .sheet(item: $renameChatDraft) { draft in
             chatRenameSheet(for: draft)
         }
-        .alert(isPresented: $showDeleteThreadAlert) {
-            Alert(
-                title: Text(coordinator.localized("Delete thread?", "删除 Thread？")),
-                message: Text(deleteThread?.displayName ?? ""),
-                primaryButton: .destructive(Text(coordinator.localized("Delete", "删除"))) {
-                    if let thread = deleteThread {
-                        workspace.deleteThread(id: thread.id)
-                    }
-                    deleteThread = nil
-                },
-                secondaryButton: .cancel {
-                    deleteThread = nil
-                }
-            )
-        }
-        .alert(isPresented: $showDeleteChatAlert) {
-            Alert(
-                title: Text(coordinator.localized("Delete chat?", "删除 Chat？")),
-                message: Text(deleteChatDraft?.chat.displayTitle ?? ""),
-                primaryButton: .destructive(Text(coordinator.localized("Delete", "删除"))) {
-                    if let item = deleteChatDraft {
-                        workspace.deleteChat(threadID: item.threadID, chatID: item.chat.id)
-                    }
-                    deleteChatDraft = nil
-                },
-                secondaryButton: .cancel {
-                    deleteChatDraft = nil
-                }
-            )
-        }
+    }
+    
+    private func deleteThreadAlert(_ thread: AIThread) -> Alert {
+        Alert(
+            title: Text(coordinator.localized("Delete thread?", "删除 Thread？")),
+            message: Text(thread.displayName),
+            primaryButton: .destructive(Text(coordinator.localized("Delete", "删除"))) {
+                workspace.deleteThread(id: thread.id)
+            },
+            secondaryButton: .cancel()
+        )
+    }
+    
+    private func deleteChatAlert(_ item: DeleteChatDraft) -> Alert {
+        Alert(
+            title: Text(coordinator.localized("Delete chat?", "删除 Chat？")),
+            message: Text(item.chat.displayTitle),
+            primaryButton: .destructive(Text(coordinator.localized("Delete", "删除"))) {
+                workspace.deleteChat(threadID: item.threadID, chatID: item.chat.id)
+            },
+            secondaryButton: .cancel()
+        )
     }
 
     private var headerSection: some View {
@@ -183,15 +173,10 @@ struct AIThreadListView: View {
             }
             Button(coordinator.localized("Delete", "删除"), role: .destructive) {
                 deleteThread = thread
-                showDeleteThreadAlert = true
             }
         }
-        .task(id: thread.id) {
-            if expandedThreads.contains(thread.id), threadBranches[thread.id] == nil {
-                if let branch = await GitService.detectBranch(directory: thread.workingDirectory) {
-                    threadBranches[thread.id] = branch
-                }
-            }
+        .alert(item: $deleteThread) { thread in
+            deleteThreadAlert(thread)
         }
     }
 
@@ -252,8 +237,10 @@ struct AIThreadListView: View {
             }
             Button(coordinator.localized("Delete", "删除"), role: .destructive) {
                 deleteChatDraft = DeleteChatDraft(threadID: thread.id, chat: chat)
-                showDeleteChatAlert = true
             }
+        }
+        .alert(item: $deleteChatDraft) { item in
+            deleteChatAlert(item)
         }
     }
 
