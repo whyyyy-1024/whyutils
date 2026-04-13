@@ -25,14 +25,15 @@ struct AIChatWorkspacePersistence: Sendable {
 
 @MainActor
 final class AIChatWorkspaceStore: ObservableObject {
-    @Published private(set) var sessions: [AIChatSession] = []
-    @Published var activeSessionID: UUID?
+    @Published private(set) var threads: [AIThread] = []
+    @Published var activeThreadID: UUID?
+    @Published var activeChatID: UUID?
 
     private let persistence: AIChatWorkspacePersistence
     private let now: @Sendable () -> Date
 
     init(
-        persistence: AIChatWorkspacePersistence = .userDefaults(key: "whyutils.ai.chat.sessions"),
+        persistence: AIChatWorkspacePersistence = .userDefaults(key: "whyutils.ai.chat.threads"),
         now: @escaping @Sendable () -> Date = Date.init
     ) {
         self.persistence = persistence
@@ -40,44 +41,104 @@ final class AIChatWorkspaceStore: ObservableObject {
         bootstrap()
     }
 
-    var activeSession: AIChatSession? {
-        guard let activeSessionID else { return sessions.first }
-        return sessions.first(where: { $0.id == activeSessionID }) ?? sessions.first
+    var activeThread: AIThread? {
+        guard let activeThreadID else { return threads.first }
+        return threads.first(where: { $0.id == activeThreadID }) ?? threads.first
     }
 
-    func createNewSession(select: Bool = true) {
-        let session = AIChatSession.empty(now: now())
-        sessions.insert(session, at: 0)
+    var activeChat: AIChatSession? {
+        guard let thread = activeThread else { return nil }
+        guard let activeChatID else { return thread.chats.first }
+        return thread.chats.first(where: { $0.id == activeChatID }) ?? thread.chats.first
+    }
+
+    func createNewThread(directory: String, select: Bool = true) {
+        let firstChat = AIChatSession.empty(now: now())
+        var thread = AIThread.create(workingDirectory: directory, now: now())
+        thread.chats = [firstChat]
+        threads.insert(thread, at: 0)
         if select {
-            activeSessionID = session.id
+            activeThreadID = thread.id
+            activeChatID = firstChat.id
         }
         persist()
     }
 
-    func selectSession(id: UUID) {
-        guard sessions.contains(where: { $0.id == id }) else { return }
-        activeSessionID = id
-    }
-
-    func renameSession(id: UUID, title: String) {
-        updateSession(id: id) { session in
-            session = session.renamed(to: title)
-            session.updatedAt = now()
+    func createNewChat(in threadID: UUID, select: Bool = true) {
+        guard let threadIndex = threads.firstIndex(where: { $0.id == threadID }) else { return }
+        let newChat = AIChatSession.empty(now: now())
+        threads[threadIndex].chats.insert(newChat, at: 0)
+        threads[threadIndex].updatedAt = now()
+        if select {
+            activeThreadID = threadID
+            activeChatID = newChat.id
         }
+        sortThreads()
         persist()
     }
 
-    func deleteSession(id: UUID) {
-        let fallback = sessions.first(where: { $0.id != id })?.id
-        sessions.removeAll { $0.id == id }
-        if sessions.isEmpty {
-            let session = AIChatSession.empty(now: now())
-            sessions = [session]
-            activeSessionID = session.id
-        } else if activeSessionID == id {
-            activeSessionID = fallback ?? sessions.first?.id
+    func selectThread(id: UUID) {
+        guard threads.contains(where: { $0.id == id }) else { return }
+        activeThreadID = id
+        if let thread = threads.first(where: { $0.id == id }) {
+            activeChatID = thread.chats.first?.id
         }
-        sortSessions()
+    }
+
+    func selectChat(threadID: UUID, chatID: UUID) {
+        guard let thread = threads.first(where: { $0.id == threadID }),
+              thread.chats.contains(where: { $0.id == chatID }) else { return }
+        activeThreadID = threadID
+        activeChatID = chatID
+    }
+
+    func deleteThread(id: UUID) {
+        let fallbackThread = threads.first(where: { $0.id != id })
+        threads.removeAll { $0.id == id }
+        if threads.isEmpty {
+            createNewThread(directory: "")
+        } else if activeThreadID == id {
+            activeThreadID = fallbackThread?.id ?? threads.first?.id
+            activeChatID = threads.first(where: { $0.id == activeThreadID })?.chats.first?.id
+        }
+        sortThreads()
+        persist()
+    }
+
+    func deleteChat(threadID: UUID, chatID: UUID) {
+        guard let threadIndex = threads.firstIndex(where: { $0.id == threadID }) else { return }
+        let fallbackChat = threads[threadIndex].chats.first(where: { $0.id != chatID })
+        threads[threadIndex].chats.removeAll { $0.id == chatID }
+        threads[threadIndex].updatedAt = now()
+        
+        if threads[threadIndex].chats.isEmpty {
+            let newChat = AIChatSession.empty(now: now())
+            threads[threadIndex].chats = [newChat]
+            if activeThreadID == threadID {
+                activeChatID = newChat.id
+            }
+        } else if activeChatID == chatID {
+            activeChatID = fallbackChat?.id ?? threads[threadIndex].chats.first?.id
+        }
+        sortThreads()
+        persist()
+    }
+
+    func renameThread(id: UUID, title: String) {
+        guard let threadIndex = threads.firstIndex(where: { $0.id == id }) else { return }
+        threads[threadIndex].title = title
+        threads[threadIndex].updatedAt = now()
+        sortThreads()
+        persist()
+    }
+
+    func renameChat(threadID: UUID, chatID: UUID, title: String) {
+        guard let threadIndex = threads.firstIndex(where: { $0.id == threadID }),
+              let chatIndex = threads[threadIndex].chats.firstIndex(where: { $0.id == chatID }) else { return }
+        threads[threadIndex].chats[chatIndex] = threads[threadIndex].chats[chatIndex].renamed(to: title)
+        threads[threadIndex].chats[chatIndex].updatedAt = now()
+        threads[threadIndex].updatedAt = now()
+        sortThreads()
         persist()
     }
 
@@ -89,9 +150,10 @@ final class AIChatWorkspaceStore: ObservableObject {
         toolTraces: [AIToolExecutionTrace] = [],
         confirmationRequest: AIConfirmationRequest? = nil,
         isStreaming: Bool = false,
-        sessionID: UUID? = nil
+        threadID: UUID? = nil,
+        chatID: UUID? = nil
     ) -> UUID {
-        let targetID = ensureActiveSession(id: sessionID)
+        let (targetThreadID, targetChatID) = ensureActiveChat(threadID: threadID, chatID: chatID)
         let message = AIChatMessageRecord(
             role: role,
             text: text,
@@ -101,17 +163,223 @@ final class AIChatWorkspaceStore: ObservableObject {
             confirmationRequest: confirmationRequest,
             isStreaming: isStreaming
         )
-        updateSession(id: targetID) { session in
-            session.messages.append(message)
+        updateChat(threadID: targetThreadID, chatID: targetChatID) { chat in
+            chat.messages.append(message)
             if role == .user {
-                session = session.applyingAutoTitle(from: text)
+                chat = chat.applyingAutoTitle(from: text)
             }
-            session.updatedAt = now()
+            chat.updatedAt = now()
+        }
+        updateThread(threadID: targetThreadID) { thread in
+            if role == .user, thread.title.isEmpty {
+                thread.title = String(text.prefix(36))
+            }
+            thread.updatedAt = now()
         }
         persist()
         return message.id
     }
 
+    func updateMessage(
+        threadID: UUID? = nil,
+        chatID: UUID? = nil,
+        messageID: UUID,
+        text: String? = nil,
+        imageAttachments: [AIChatImageAttachment]? = nil,
+        toolTraces: [AIToolExecutionTrace]? = nil,
+        confirmationRequest: AIConfirmationRequest?? = nil,
+        isStreaming: Bool? = nil
+    ) {
+        let (targetThreadID, targetChatID) = ensureActiveChat(threadID: threadID, chatID: chatID)
+        updateChat(threadID: targetThreadID, chatID: targetChatID) { chat in
+            guard let index = chat.messages.firstIndex(where: { $0.id == messageID }) else { return }
+            if let text { chat.messages[index].text = text }
+            if let imageAttachments { chat.messages[index].imageAttachments = imageAttachments }
+            if let toolTraces { chat.messages[index].toolTraces = toolTraces }
+            if let confirmationRequest { chat.messages[index].confirmationRequest = confirmationRequest }
+            if let isStreaming { chat.messages[index].isStreaming = isStreaming }
+            chat.updatedAt = now()
+        }
+        updateThread(threadID: targetThreadID) { thread in
+            thread.updatedAt = now()
+        }
+        persist()
+    }
+
+    func removeConfirmation(threadID: UUID? = nil, chatID: UUID? = nil, messageID: UUID) {
+        updateMessage(threadID: threadID, chatID: chatID, messageID: messageID, confirmationRequest: .some(nil))
+    }
+
+    func updateFileChangeSummary(threadID: UUID? = nil, chatID: UUID? = nil, summary: FileChangeSummary) {
+        let (targetThreadID, targetChatID) = ensureActiveChat(threadID: threadID, chatID: chatID)
+        updateChat(threadID: targetThreadID, chatID: targetChatID) { chat in
+            chat.fileChangeSummary = summary
+            chat.updatedAt = now()
+        }
+        updateThread(threadID: targetThreadID) { thread in
+            thread.updatedAt = now()
+        }
+        persist()
+    }
+
+    private func bootstrap() {
+        guard
+            let data = persistence.load(),
+            let decoded = try? JSONDecoder().decode([AIThread].self, from: data),
+            decoded.isEmpty == false
+        else {
+            createNewThread(directory: "")
+            syncSessions()
+            return
+        }
+
+        threads = decoded.map { thread in
+            var normalizedThread = thread
+            normalizedThread.chats = thread.chats.map { $0.normalizedForPersistence() }
+            return normalizedThread
+        }
+        sortThreads()
+        activeThreadID = threads.first?.id
+        activeChatID = threads.first?.chats.first?.id
+        syncSessions()
+        persist()
+    }
+
+    private func persist() {
+        let normalized = threads.map { thread -> AIThread in
+            var normalizedThread = thread
+            normalizedThread.chats = thread.chats.map { $0.normalizedForPersistence() }
+            return normalizedThread
+        }
+        let data = try? JSONEncoder().encode(normalized)
+        persistence.save(data)
+    }
+
+    private func ensureActiveChat(threadID: UUID?, chatID: UUID?) -> (UUID, UUID) {
+        if let threadID, let chatID { return (threadID, chatID) }
+        
+        if let activeThreadID, let activeChatID {
+            if threads.contains(where: { $0.id == activeThreadID }),
+               let thread = threads.first(where: { $0.id == activeThreadID }),
+               thread.chats.contains(where: { $0.id == activeChatID }) {
+                return (activeThreadID, activeChatID)
+            }
+        }
+        
+        if let existingThread = threads.first {
+            activeThreadID = existingThread.id
+            if let existingChat = existingThread.chats.first {
+                activeChatID = existingChat.id
+                return (existingThread.id, existingChat.id)
+            }
+            let newChat = AIChatSession.empty(now: now())
+            var thread = existingThread
+            thread.chats = [newChat]
+            threads[0] = thread
+            activeChatID = newChat.id
+            return (existingThread.id, newChat.id)
+        }
+        
+        let newChat = AIChatSession.empty(now: now())
+        var thread = AIThread.create(workingDirectory: "", now: now())
+        thread.chats = [newChat]
+        threads = [thread]
+        activeThreadID = thread.id
+        activeChatID = newChat.id
+        return (thread.id, newChat.id)
+    }
+
+    private func updateThread(threadID: UUID, mutate: (inout AIThread) -> Void) {
+        guard let index = threads.firstIndex(where: { $0.id == threadID }) else { return }
+        var thread = threads[index]
+        mutate(&thread)
+        threads[index] = thread
+        sortThreads()
+    }
+
+    private func updateChat(threadID: UUID, chatID: UUID, mutate: (inout AIChatSession) -> Void) {
+        guard let threadIndex = threads.firstIndex(where: { $0.id == threadID }) else { return }
+        guard let chatIndex = threads[threadIndex].chats.firstIndex(where: { $0.id == chatID }) else { return }
+        var chat = threads[threadIndex].chats[chatIndex]
+        mutate(&chat)
+        threads[threadIndex].chats[chatIndex] = chat
+        sortThreads()
+    }
+
+    private func sortThreads() {
+        threads.sort { $0.updatedAt > $1.updatedAt }
+    }
+    
+    @Published private(set) var sessions: [AIChatSession] = []
+    @Published var activeSessionID: UUID?
+    
+    var activeSession: AIChatSession? {
+        activeChat
+    }
+    
+    func createNewSession(select: Bool = true) {
+        if let threadID = activeThreadID {
+            createNewChat(in: threadID, select: select)
+        } else {
+            createNewThread(directory: "", select: select)
+        }
+        syncSessions()
+    }
+    
+    func selectSession(id: UUID) {
+        for thread in threads {
+            if let chat = thread.chats.first(where: { $0.id == id }) {
+                selectChat(threadID: thread.id, chatID: chat.id)
+                syncSessions()
+                return
+            }
+        }
+    }
+    
+    func deleteSession(id: UUID) {
+        for thread in threads {
+            if thread.chats.contains(where: { $0.id == id }) {
+                deleteChat(threadID: thread.id, chatID: id)
+                syncSessions()
+                return
+            }
+        }
+    }
+    
+    func renameSession(id: UUID, title: String) {
+        for thread in threads {
+            if thread.chats.contains(where: { $0.id == id }) {
+                renameChat(threadID: thread.id, chatID: id, title: title)
+                syncSessions()
+                return
+            }
+        }
+    }
+    
+    @discardableResult
+    func appendMessage(
+        role: AIChatMessageRole,
+        text: String,
+        imageAttachments: [AIChatImageAttachment] = [],
+        toolTraces: [AIToolExecutionTrace] = [],
+        confirmationRequest: AIConfirmationRequest? = nil,
+        isStreaming: Bool = false,
+        sessionID: UUID? = nil
+    ) -> UUID {
+        let result = appendMessage(
+            role: role,
+            text: text,
+            imageAttachments: imageAttachments,
+            toolTraces: toolTraces,
+            confirmationRequest: confirmationRequest,
+            isStreaming: isStreaming,
+            threadID: nil,
+            chatID: sessionID
+        )
+        syncSessions()
+        return result
+    }
+    
     func updateMessage(
         sessionID: UUID? = nil,
         messageID: UUID,
@@ -121,70 +389,26 @@ final class AIChatWorkspaceStore: ObservableObject {
         confirmationRequest: AIConfirmationRequest?? = nil,
         isStreaming: Bool? = nil
     ) {
-        let targetID = ensureActiveSession(id: sessionID)
-        updateSession(id: targetID) { session in
-            guard let index = session.messages.firstIndex(where: { $0.id == messageID }) else { return }
-            if let text { session.messages[index].text = text }
-            if let imageAttachments { session.messages[index].imageAttachments = imageAttachments }
-            if let toolTraces { session.messages[index].toolTraces = toolTraces }
-            if let confirmationRequest { session.messages[index].confirmationRequest = confirmationRequest }
-            if let isStreaming { session.messages[index].isStreaming = isStreaming }
-            session.updatedAt = now()
-        }
-        persist()
+        updateMessage(
+            threadID: nil,
+            chatID: sessionID,
+            messageID: messageID,
+            text: text,
+            imageAttachments: imageAttachments,
+            toolTraces: toolTraces,
+            confirmationRequest: confirmationRequest,
+            isStreaming: isStreaming
+        )
+        syncSessions()
     }
-
+    
     func removeConfirmation(sessionID: UUID? = nil, messageID: UUID) {
-        updateMessage(sessionID: sessionID, messageID: messageID, confirmationRequest: .some(nil))
+        removeConfirmation(threadID: nil, chatID: sessionID, messageID: messageID)
+        syncSessions()
     }
-
-    private func bootstrap() {
-        guard
-            let data = persistence.load(),
-            let decoded = try? JSONDecoder().decode([AIChatSession].self, from: data),
-            decoded.isEmpty == false
-        else {
-            let session = AIChatSession.empty(now: now())
-            sessions = [session]
-            activeSessionID = session.id
-            persist()
-            return
-        }
-
-        sessions = decoded.map { $0.normalizedForPersistence() }
-        sortSessions()
-        activeSessionID = sessions.first?.id
-        persist()
-    }
-
-    private func persist() {
-        let normalized = sessions.map { $0.normalizedForPersistence() }
-        let data = try? JSONEncoder().encode(normalized)
-        persistence.save(data)
-    }
-
-    private func ensureActiveSession(id: UUID?) -> UUID {
-        if let id { return id }
-        if let activeSessionID { return activeSessionID }
-        if let existing = sessions.first?.id {
-            activeSessionID = existing
-            return existing
-        }
-        let session = AIChatSession.empty(now: now())
-        sessions = [session]
-        activeSessionID = session.id
-        return session.id
-    }
-
-    private func updateSession(id: UUID, mutate: (inout AIChatSession) -> Void) {
-        guard let index = sessions.firstIndex(where: { $0.id == id }) else { return }
-        var session = sessions[index]
-        mutate(&session)
-        sessions[index] = session
-        sortSessions()
-    }
-
-    private func sortSessions() {
-        sessions.sort { $0.updatedAt > $1.updatedAt }
+    
+    private func syncSessions() {
+        sessions = threads.flatMap { $0.chats }.sorted { $0.updatedAt > $1.updatedAt }
+        activeSessionID = activeChatID
     }
 }

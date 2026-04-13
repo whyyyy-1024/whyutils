@@ -9,7 +9,7 @@ private final class DataBox: @unchecked Sendable {
 @MainActor
 struct AIChatWorkspaceStoreTests {
     @Test
-    func bootstrapCreatesBlankSessionWhenStorageIsEmpty() {
+    func bootstrapCreatesBlankThreadWithFirstChatWhenStorageIsEmpty() {
         let savedData = DataBox()
         let store = AIChatWorkspaceStore(
             persistence: .init(
@@ -19,65 +19,140 @@ struct AIChatWorkspaceStoreTests {
             now: { Date(timeIntervalSince1970: 100) }
         )
 
-        #expect(store.sessions.count == 1)
-        #expect(store.activeSession?.displayTitle == "New chat")
+        #expect(store.threads.count == 1)
+        #expect(store.threads.first?.chats.count == 1)
+        #expect(store.activeChat?.displayTitle == "New chat")
         #expect(savedData.data != nil)
     }
 
     @Test
-    func createSessionSelectsItAndKeepsMostRecentFirst() {
-        let store = AIChatWorkspaceStore(
-            persistence: .inMemory,
-            now: { Date(timeIntervalSince1970: 100) }
-        )
-        let firstID = try! #require(store.activeSession?.id)
-
-        store.createNewSession()
-
-        #expect(store.sessions.count == 2)
-        #expect(store.activeSession?.id != firstID)
-        #expect(store.sessions.first?.id == store.activeSession?.id)
-    }
-
-    @Test
-    func renameMarksSessionAsUserRenamed() {
+    func createNewThreadAddsThreadWithFirstChat() {
         let store = AIChatWorkspaceStore(persistence: .inMemory)
-        let sessionID = try! #require(store.activeSession?.id)
-
-        store.renameSession(id: sessionID, title: "部署问题排查")
-
-        #expect(store.activeSession?.title == "部署问题排查")
-        #expect(store.activeSession?.isUserRenamed == true)
+        
+        store.createNewThread(directory: "/test/project")
+        
+        #expect(store.threads.count == 2)
+        #expect(store.threads.first?.chats.count == 1)
+        #expect(store.activeThreadID != nil)
+        #expect(store.activeChatID != nil)
+        #expect(store.threads.first?.workingDirectory == "/test/project")
     }
 
     @Test
-    func deletingSelectedSessionFallsBackToAnotherSession() {
+    func createNewChatAddsChatToActiveThread() {
         let store = AIChatWorkspaceStore(persistence: .inMemory)
-        let firstID = try! #require(store.activeSession?.id)
-        store.createNewSession()
-        let secondID = try! #require(store.activeSession?.id)
-
-        store.deleteSession(id: secondID)
-
-        #expect(store.sessions.count == 1)
-        #expect(store.activeSession?.id == firstID)
+        store.createNewThread(directory: "/test/project")
+        let threadID = try! #require(store.activeThreadID)
+        
+        store.createNewChat(in: threadID)
+        
+        #expect(store.threads.first?.chats.count == 2)
     }
 
     @Test
-    func persistedSessionsRestoreAndNormalizeStreamingMessages() throws {
+    func selectChatUpdatesActiveIDs() {
+        let store = AIChatWorkspaceStore(persistence: .inMemory)
+        store.createNewThread(directory: "/test/project")
+        let threadID = try! #require(store.activeThreadID)
+        store.createNewChat(in: threadID)
+        let firstChatID = store.threads.first?.chats.last?.id
+        
+        store.selectChat(threadID: threadID, chatID: firstChatID!)
+        
+        #expect(store.activeChatID == firstChatID)
+    }
+
+    @Test
+    func selectThreadUpdatesActiveThreadAndChat() {
+        let store = AIChatWorkspaceStore(persistence: .inMemory)
+        store.createNewThread(directory: "/first")
+        let firstThreadID = try! #require(store.activeThreadID)
+        store.createNewThread(directory: "/second")
+        
+        store.selectThread(id: firstThreadID)
+        
+        #expect(store.activeThreadID == firstThreadID)
+        #expect(store.activeChatID == store.threads.first(where: { $0.id == firstThreadID })?.chats.first?.id)
+    }
+
+    @Test
+    func deleteThreadFallsBackToAnotherThread() {
+        let store = AIChatWorkspaceStore(persistence: .inMemory)
+        store.createNewThread(directory: "/first")
+        let firstThreadID = try! #require(store.activeThreadID)
+        store.createNewThread(directory: "/second")
+        let secondThreadID = try! #require(store.activeThreadID)
+        
+        store.deleteThread(id: secondThreadID)
+        
+        #expect(store.threads.count == 2)
+        #expect(store.activeThreadID == firstThreadID)
+    }
+
+    @Test
+    func deleteChatFallsBackToAnotherChat() {
+        let store = AIChatWorkspaceStore(persistence: .inMemory)
+        store.createNewThread(directory: "/test")
+        let threadID = try! #require(store.activeThreadID)
+        store.createNewChat(in: threadID)
+        let firstChatID = store.threads.first?.chats.last?.id
+        store.selectChat(threadID: threadID, chatID: firstChatID!)
+        let secondChatID = try! #require(store.activeChatID)
+        
+        store.deleteChat(threadID: threadID, chatID: secondChatID)
+        
+        #expect(store.threads.first?.chats.count == 1)
+        #expect(store.activeChatID != secondChatID)
+    }
+
+    @Test
+    func renameThreadUpdatesThreadTitle() {
+        let store = AIChatWorkspaceStore(persistence: .inMemory)
+        store.createNewThread(directory: "/test")
+        let threadID = try! #require(store.activeThreadID)
+        
+        store.renameThread(id: threadID, title: "My Project")
+        
+        #expect(store.threads.first?.title == "My Project")
+    }
+
+    @Test
+    func renameChatUpdatesChatTitle() {
+        let store = AIChatWorkspaceStore(persistence: .inMemory)
+        store.createNewThread(directory: "/test")
+        let threadID = try! #require(store.activeThreadID)
+        let chatID = try! #require(store.activeChatID)
+        
+        store.renameChat(threadID: threadID, chatID: chatID, title: "部署问题排查")
+        
+        #expect(store.activeChat?.title == "部署问题排查")
+        #expect(store.activeChat?.isUserRenamed == true)
+    }
+
+    @Test
+    func persistedThreadsRestoreAndNormalizeStreamingMessages() throws {
         let persisted = [
-            AIChatSession(
+            AIThread(
                 id: UUID(),
-                title: "恢复会话",
-                isUserRenamed: false,
+                title: "项目",
+                workingDirectory: "/test",
                 createdAt: Date(timeIntervalSince1970: 10),
                 updatedAt: Date(timeIntervalSince1970: 20),
-                messages: [
-                    AIChatMessageRecord(
-                        role: .assistant,
-                        text: "还在输出",
-                        createdAt: Date(timeIntervalSince1970: 15),
-                        isStreaming: true
+                chats: [
+                    AIChatSession(
+                        id: UUID(),
+                        title: "恢复会话",
+                        isUserRenamed: false,
+                        createdAt: Date(timeIntervalSince1970: 10),
+                        updatedAt: Date(timeIntervalSince1970: 20),
+                        messages: [
+                            AIChatMessageRecord(
+                                role: .assistant,
+                                text: "还在输出",
+                                createdAt: Date(timeIntervalSince1970: 15),
+                                isStreaming: true
+                            )
+                        ]
                     )
                 ]
             )
@@ -90,19 +165,21 @@ struct AIChatWorkspaceStoreTests {
             )
         )
 
-        #expect(store.sessions.count == 1)
-        #expect(store.activeSession?.title == "恢复会话")
-        #expect(store.activeSession?.messages.first?.isStreaming == false)
+        #expect(store.threads.count == 1)
+        #expect(store.activeThread?.title == "项目")
+        #expect(store.activeChat?.title == "恢复会话")
+        #expect(store.activeChat?.messages.first?.isStreaming == false)
     }
 
     @Test
-    func appendingUserMessageAutoTitlesTheSession() {
+    func appendingUserMessageAutoTitlesChatAndThread() {
         let store = AIChatWorkspaceStore(persistence: .inMemory)
 
         _ = store.appendMessage(role: .user, text: "帮我找一下今天改过的配置文件")
 
-        #expect(store.activeSession?.title == "帮我找一下今天改过的配置文件")
-        #expect(store.activeSession?.messages.count == 1)
+        #expect(store.activeChat?.title == "帮我找一下今天改过的配置文件")
+        #expect(store.activeThread?.title == "帮我找一下今天改过的配置文件")
+        #expect(store.activeChat?.messages.count == 1)
     }
 
     @Test
@@ -112,7 +189,34 @@ struct AIChatWorkspaceStoreTests {
 
         store.updateMessage(messageID: messageID, text: "第一段回复", isStreaming: false)
 
-        #expect(store.activeSession?.messages.first?.text == "第一段回复")
-        #expect(store.activeSession?.messages.first?.isStreaming == false)
+        #expect(store.activeChat?.messages.first?.text == "第一段回复")
+        #expect(store.activeChat?.messages.first?.isStreaming == false)
+    }
+
+    @Test
+    func updateFileChangeSummaryUpdatesActiveChat() {
+        let store = AIChatWorkspaceStore(persistence: .inMemory)
+        store.createNewThread(directory: "/test")
+        
+        var summary = FileChangeSummary()
+        summary.createdFiles = ["test.swift"]
+        summary.totalLinesAdded = 100
+        store.updateFileChangeSummary(summary: summary)
+        
+        #expect(store.activeChat?.fileChangeSummary.createdFiles == ["test.swift"])
+        #expect(store.activeChat?.fileChangeSummary.totalLinesAdded == 100)
+    }
+
+    @Test
+    func activeThreadReturnsNilWhenEmpty() {
+        let store = AIChatWorkspaceStore(
+            persistence: .init(
+                load: { try? JSONEncoder().encode([AIThread]()) },
+                save: { _ in }
+            )
+        )
+        
+        #expect(store.threads.count == 1)
+        #expect(store.activeThread != nil)
     }
 }
