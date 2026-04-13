@@ -338,12 +338,15 @@ struct AIAgentService: Sendable {
           * code_outline: {"path": "/path"}
           * memory_store: {"content": "text to remember", "category": "general"}
           * memory_retrieve: {"query": "search term"}
+        - IMPORTANT: When the user asks about "this project" or "current directory", use the working directory path provided below as the path argument.
         - If a tool uses the latest clipboard text, pass an empty JSON object.
         - Use stored memories to understand user context (e.g., working directory, preferences).
         - Never wrap JSON in markdown fences.
         """
 
         let userPrompt = """
+        Working directory: \(context.workingDirectory)
+        
         Recent conversation:
         \(conversationSummary.isEmpty ? "none" : conversationSummary)
 
