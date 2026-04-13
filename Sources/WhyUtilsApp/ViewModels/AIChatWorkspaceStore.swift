@@ -171,9 +171,7 @@ final class AIChatWorkspaceStore: ObservableObject {
             chat.updatedAt = now()
         }
         updateThread(threadID: targetThreadID) { thread in
-            if role == .user, thread.title.isEmpty {
-                thread.title = String(text.prefix(36))
-            }
+            // Don't auto-update thread title - it should remain as directory name or user-set title
             thread.updatedAt = now()
         }
         persist()
