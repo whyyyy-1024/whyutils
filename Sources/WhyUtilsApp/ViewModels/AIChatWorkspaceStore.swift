@@ -226,11 +226,14 @@ final class AIChatWorkspaceStore: ObservableObject {
         if let data = persistence.load(),
            let decoded = try? JSONDecoder().decode([AIThread].self, from: data),
            decoded.isEmpty == false {
-            threads = decoded.map { thread in
-                var normalizedThread = thread
-                normalizedThread.chats = thread.chats.map { $0.normalizedForPersistence() }
-                return normalizedThread
-            }
+            // Filter out threads with empty workingDirectory (legacy bug)
+            threads = decoded
+                .filter { $0.workingDirectory.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false }
+                .map { thread in
+                    var normalizedThread = thread
+                    normalizedThread.chats = thread.chats.map { $0.normalizedForPersistence() }
+                    return normalizedThread
+                }
             sortThreads()
             activeThreadID = threads.first?.id
             activeChatID = threads.first?.chats.first?.id
@@ -244,7 +247,10 @@ final class AIChatWorkspaceStore: ObservableObject {
             return
         }
 
-        createNewThread(directory: "")
+        // No existing data - don't auto-create thread, wait for user to select directory
+        threads = []
+        activeThreadID = nil
+        activeChatID = nil
         syncSessions()
     }
 
@@ -306,13 +312,8 @@ final class AIChatWorkspaceStore: ObservableObject {
             return (existingThread.id, newChat.id)
         }
         
-        let newChat = AIChatSession.empty(now: now())
-        var thread = AIThread.create(workingDirectory: "", now: now())
-        thread.chats = [newChat]
-        threads = [thread]
-        activeThreadID = thread.id
-        activeChatID = newChat.id
-        return (thread.id, newChat.id)
+        // No threads exist - return placeholder IDs (user needs to create thread first)
+        return (UUID(), UUID())
     }
 
     private func updateThread(threadID: UUID, mutate: (inout AIThread) -> Void) {

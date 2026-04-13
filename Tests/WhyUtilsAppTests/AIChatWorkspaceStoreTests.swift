@@ -9,7 +9,7 @@ private final class DataBox: @unchecked Sendable {
 @MainActor
 struct AIChatWorkspaceStoreTests {
     @Test
-    func bootstrapCreatesBlankThreadWithFirstChatWhenStorageIsEmpty() {
+    func bootstrapDoesNotCreateThreadWhenStorageIsEmpty() {
         let savedData = DataBox()
         let store = AIChatWorkspaceStore(
             persistence: .init(
@@ -19,10 +19,9 @@ struct AIChatWorkspaceStoreTests {
             now: { Date(timeIntervalSince1970: 100) }
         )
 
-        #expect(store.threads.count == 1)
-        #expect(store.threads.first?.chats.count == 1)
-        #expect(store.activeChat?.displayTitle == "New chat")
-        #expect(savedData.data != nil)
+        #expect(store.threads.count == 0)
+        #expect(store.activeThreadID == nil)
+        #expect(store.activeChatID == nil)
     }
 
     @Test
@@ -31,7 +30,7 @@ struct AIChatWorkspaceStoreTests {
         
         store.createNewThread(directory: "/test/project")
         
-        #expect(store.threads.count == 2)
+        #expect(store.threads.count == 1)
         #expect(store.threads.first?.chats.count == 1)
         #expect(store.activeThreadID != nil)
         #expect(store.activeChatID != nil)
@@ -85,7 +84,7 @@ struct AIChatWorkspaceStoreTests {
         
         store.deleteThread(id: secondThreadID)
         
-        #expect(store.threads.count == 2)
+        #expect(store.threads.count == 1)
         #expect(store.activeThreadID == firstThreadID)
     }
 
@@ -174,6 +173,7 @@ struct AIChatWorkspaceStoreTests {
     @Test
     func appendingUserMessageAutoTitlesChatAndThread() {
         let store = AIChatWorkspaceStore(persistence: .inMemory)
+        store.createNewThread(directory: "/test")
 
         _ = store.appendMessage(role: .user, text: "帮我找一下今天改过的配置文件")
 
@@ -185,6 +185,7 @@ struct AIChatWorkspaceStoreTests {
     @Test
     func updatingMessageChangesTextAndStreamingState() {
         let store = AIChatWorkspaceStore(persistence: .inMemory)
+        store.createNewThread(directory: "/test")
         let messageID = store.appendMessage(role: .assistant, text: "", isStreaming: true)
 
         store.updateMessage(messageID: messageID, text: "第一段回复", isStreaming: false)
@@ -216,7 +217,7 @@ struct AIChatWorkspaceStoreTests {
             )
         )
         
-        #expect(store.threads.count == 1)
-        #expect(store.activeThread != nil)
+        #expect(store.threads.count == 0)
+        #expect(store.activeThread == nil)
     }
 }
