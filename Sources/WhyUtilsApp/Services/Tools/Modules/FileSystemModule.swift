@@ -3,6 +3,8 @@ import Foundation
 struct FileSystemModule: ToolProvider {
     let providerId = "filesystem"
     
+    @MainActor private var tracker: FileChangeTracker { FileChangeTracker.shared }
+    
     private static let forbiddenPathPrefixes = [
         "/System", "/Library", "/usr", "/bin", "/etc",
         "~/.ssh", "~/.gnupg"
@@ -90,12 +92,18 @@ struct FileSystemModule: ToolProvider {
     private func createDirectory(path: String) throws -> String {
         try validatePath(path)
         try FileManager.default.createDirectory(atPath: path, withIntermediateDirectories: true)
+        Task { @MainActor in
+            tracker.recordCreated(path: path)
+        }
         return "Created directory: \(path)"
     }
     
     private func deletePath(path: String) throws -> String {
         try validatePath(path)
         try FileManager.default.removeItem(atPath: path)
+        Task { @MainActor in
+            tracker.recordDeleted(path: path)
+        }
         return "Deleted: \(path)"
     }
     
@@ -103,6 +111,9 @@ struct FileSystemModule: ToolProvider {
         try validatePath(source)
         try validatePath(destination)
         try FileManager.default.copyItem(atPath: source, toPath: destination)
+        Task { @MainActor in
+            tracker.recordCreated(path: destination)
+        }
         return "Copied \(source) to \(destination)"
     }
     
@@ -110,6 +121,10 @@ struct FileSystemModule: ToolProvider {
         try validatePath(source)
         try validatePath(destination)
         try FileManager.default.moveItem(atPath: source, toPath: destination)
+        Task { @MainActor in
+            tracker.recordCreated(path: destination)
+            tracker.recordDeleted(path: source)
+        }
         return "Moved \(source) to \(destination)"
     }
     
@@ -137,7 +152,13 @@ struct FileSystemModule: ToolProvider {
         process.standardError = pipe
         try process.run()
         process.waitUntilExit()
-        return process.terminationStatus == 0 ? "Compressed to \(destination)" : "Failed to compress"
+        if process.terminationStatus == 0 {
+            Task { @MainActor in
+                tracker.recordCreated(path: destination)
+            }
+            return "Compressed to \(destination)"
+        }
+        return "Failed to compress"
     }
     
     private func decompress(source: String, destination: String) throws -> String {
@@ -150,7 +171,13 @@ struct FileSystemModule: ToolProvider {
         process.standardError = pipe
         try process.run()
         process.waitUntilExit()
-        return process.terminationStatus == 0 ? "Decompressed to \(destination)" : "Failed to decompress"
+        if process.terminationStatus == 0 {
+            Task { @MainActor in
+                tracker.recordCreated(path: destination)
+            }
+            return "Decompressed to \(destination)"
+        }
+        return "Failed to decompress"
     }
     
     private func getInfo(path: String) throws -> String {
